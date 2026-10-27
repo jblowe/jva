@@ -10,7 +10,7 @@ Mac                                         EC2 (Ubuntu 24.04, Apache2)
 ---                                         ---------------------------
 archive_catalog.sqlite --publish.py-->      /mnt/images/jva_data/archive_public.sqlite
 _derivatives/ (images, PDF, RTF) --rsync--> /mnt/images/jva_images/
-~/GitHub/jva  --git push / git pull-->      ~/jva on the server (code, venv, config.json)
+~/GitHub/jva  --git push / git pull-->      ~/jva on the server (code, config.json)
 
 browser --> Apache :443 jva.johnblowe.com
               /derivatives/...  served from /mnt/images/jva_images
@@ -39,11 +39,9 @@ git push -u origin main                       # so the server can clone it
 2. **Code and Python.**
 
    ```sh
-   sudo apt install python3.12-venv          # if venv isn't there yet
    git clone https://github.com/jblowe/jva.git ~/jva
    cd ~/jva
-   python3 -m venv venv
-   venv/bin/pip install -r requirements.txt
+   ~/venv/bin/pip install -r requirements.txt     # the venv the server's Python apps share
    cp deploy/server-config.example.json config.json
    ```
 
@@ -87,7 +85,7 @@ git push -u origin main                       # so the server can clone it
    journalctl -u jva -n 20                         # if not
    ```
 
-   If the server's user isn't `ubuntu` or the clone is elsewhere, change the paths in
+   If the server's user isn't `ubuntu` or the clone or the venv is elsewhere, change the paths in
    `jva.service` before copying it.
 
 6. **Apache.**
@@ -142,7 +140,7 @@ On the Mac: commit, then `git push`. On the server:
 
 ```sh
 cd ~/jva && git pull
-venv/bin/pip install -r requirements.txt     # only if requirements.txt changed
+~/venv/bin/pip install -r requirements.txt   # only if requirements.txt changed
 sudo systemctl restart jva
 ```
 
