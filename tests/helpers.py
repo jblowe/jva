@@ -27,9 +27,9 @@ def load_script(name):
     return mod
 
 
-def run_script(name, *args, config, input_text=None):
+def run_script(name, *args, config, input_text=None, env=None):
     """Run scripts/<name>.py with this config; -> CompletedProcess (text)."""
-    env = dict(os.environ, JVA_CONFIG=str(config), JVA_NO_WARM="1")
+    env = dict(env or os.environ, JVA_CONFIG=str(config), JVA_NO_WARM="1")
     return subprocess.run([sys.executable, str(SCRIPTS / f"{name}.py"), *args], env=env, text=True,
                           capture_output=True, input=input_text, timeout=300)
 
