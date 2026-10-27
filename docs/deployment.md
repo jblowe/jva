@@ -72,7 +72,19 @@ git push -u origin main                       # so the server can clone it
    Check there is room: `df -h /mnt/images`. The derivatives folder on the Mac tells you how much
    is needed (`du -sh "/Volumes/TAP PROJECT/_derivatives"`); the public share is a bit less.
 
-4. **Publish from the Mac** (next section) so there is something to show.
+4. **Fill the two folders, from the Mac.** This is what `publish.py --upload` does (details in
+   the next section); nothing is copied by hand:
+
+   ```sh
+   cd ~/GitHub/jva
+   python3 scripts/publish.py --upload
+   ```
+
+   It builds the public catalogue on the Mac, then copies it to `/mnt/images/jva_data` and
+   the preview images and PDF/RTF copies to `/mnt/images/jva_images`, over ssh with rsync.
+   Afterwards, on the server, `ls /mnt/images/jva_data` shows `archive_public.sqlite`, and
+   `ls /mnt/images/jva_images` shows `thumb` and `preview` folders, plus `pdf` and `rtf`
+   for the old Word files. The first upload sends every image, so it takes a while.
 
 5. **The app under gunicorn.** Port 8007 is in `deploy/gunicorn.conf.py`; if
    `sudo ss -ltnp | grep 8007` shows it taken, pick another and use it in the Apache file too.
@@ -120,10 +132,20 @@ Plug in the drive with the derivatives folder, then:
 
 ```sh
 cd ~/GitHub/jva
-python3 scripts/publish.py                   # build data/public/archive_public.sqlite; look at it
-python3 scripts/publish.py --upload          # build and upload
+python3 scripts/publish.py                   # build only, on the Mac; nothing is sent
+python3 scripts/publish.py --upload          # build, then fill jva_data and jva_images on the server
+python3 scripts/publish.py --upload-only     # send the last build again, without rebuilding
 python3 scripts/publish.py --upload-only --dry-run   # what would be sent, changing nothing
 ```
+
+Without `--upload`, publish.py only builds, in the `public` folder inside the data folder
+(`~/Claude/Projects/Voelker/public`): `archive_public.sqlite`, and `derivatives_files.txt`,
+the list of the images that catalogue uses. With `--upload` it then sends, in this order:
+
+| What | From (Mac) | To (server) |
+|---|---|---|
+| the images and PDF/RTF copies in the list | the derivatives folder (`derivatives_dir`, or `-d`) | `/mnt/images/jva_images` |
+| the public catalogue | `public/archive_public.sqlite` | `/mnt/images/jva_data/archive_public.sqlite` |
 
 To try the public catalogue on the Mac before uploading, point a second config at it:
 `"catalogue": ".../public/archive_public.sqlite"` and `"app": {"mode": "public"}`, then
