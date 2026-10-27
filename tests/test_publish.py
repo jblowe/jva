@@ -107,19 +107,39 @@ class Upload(unittest.TestCase):
         ssh = bin_dir / "ssh"
         ssh.write_text('#!/bin/sh\nshift\nexec sh -c "$*"\n')
         ssh.chmod(ssh.stat().st_mode | stat.S_IEXEC)
-        server = ROOT / "srv"
-        (server / "derivatives" / "thumb" / "zz").mkdir(parents=True)
-        (server / "derivatives" / "thumb" / "zz" / "old.webp").write_bytes(b"old")
+        images = ROOT / "mnt" / "images"                  # shared with other sites
+        (images / "other_site" / "pics").mkdir(parents=True)
+        (images / "other_site" / "pics" / "keep.jpg").write_bytes(b"not ours")
         env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
-        r = H.run_script("publish", "--upload-only", "-d", str(DERIV), "--server", "fakehost",
-                         "--remote-dir", str(server), config=CONFIG, env=env)
+
+        def upload(images_dir):
+            return H.run_script("publish", "--upload-only", "-d", str(DERIV), "--server", "fakehost",
+                                "--remote-data-dir", str(images / "jva_data"),
+                                "--remote-images-dir", str(images_dir), config=CONFIG, env=env)
+
+        # pointed at the shared parent by mistake: refused, nothing touched
+        r = upload(images)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("isn't marked", r.stdout + r.stderr)
+        self.assertTrue((images / "other_site" / "pics" / "keep.jpg").exists())
+
+        r = upload(images / "jva_images")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue((server / "archive_public.sqlite").exists())
-        self.assertFalse((server / "archive_public.sqlite.new").exists())
+        self.assertTrue((images / "jva_data" / "archive_public.sqlite").exists())
+        self.assertFalse((images / "jva_data" / "archive_public.sqlite.new").exists())
         b = SHA["Burial 2.jpg"][:2]
-        self.assertTrue((server / "derivatives" / "thumb" / b / "Burial 2.jpg.webp").exists())
-        self.assertFalse((server / "derivatives" / "thumb" / "zz").exists())      # pruned
-        self.assertFalse(list(server.rglob("lecture*")))
+        self.assertTrue((images / "jva_images" / "thumb" / b / "Burial 2.jpg.webp").exists())
+        self.assertTrue((images / "jva_images" / ".jva_images").exists())
+
+        # a later upload prunes files the catalogue no longer uses, and only in jva_images
+        (images / "jva_images" / "thumb" / "zz").mkdir()
+        (images / "jva_images" / "thumb" / "zz" / "old.webp").write_bytes(b"old")
+        r = upload(images / "jva_images")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse((images / "jva_images" / "thumb" / "zz").exists())
+        self.assertTrue((images / "jva_images" / ".jva_images").exists())
+        self.assertTrue((images / "other_site" / "pics" / "keep.jpg").exists())
+        self.assertFalse(list(images.rglob("lecture*")))
 
 
 if __name__ == "__main__":

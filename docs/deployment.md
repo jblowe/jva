@@ -8,12 +8,12 @@ so Reveal in Finder, Delete and the original files don't exist on the site at al
 ```
 Mac                                         EC2 (Ubuntu 24.04, Apache2)
 ---                                         ---------------------------
-archive_catalog.sqlite --publish.py-->      /srv/jva-data/archive_public.sqlite
-_derivatives/ (images, PDF, RTF) --rsync--> /srv/jva-data/derivatives/
+archive_catalog.sqlite --publish.py-->      /mnt/images/jva_data/archive_public.sqlite
+_derivatives/ (images, PDF, RTF) --rsync--> /mnt/images/jva_images/
 ~/GitHub/jva  --git push / git pull-->      /home/ubuntu/GitHub/jva   (code, venv, config.json)
 
 browser --> Apache :443 jva.johnblowe.com
-              /derivatives/...  served from /srv/jva-data/derivatives
+              /derivatives/...  served from /mnt/images/jva_images
               everything else   proxied to gunicorn on 127.0.0.1:8007 (systemd unit "jva")
 ```
 
@@ -34,14 +34,22 @@ browser --> Apache :443 jva.johnblowe.com
    cp deploy/server-config.example.json config.json
    ```
 
-3. **The data folder**, which publish.py uploads to:
+3. **The two folders publish.py uploads to**, beside the other image collections in
+   `/mnt/images`: `jva_images` for the derivatives and `jva_data` for the catalogue.
 
    ```sh
-   sudo mkdir -p /srv/jva-data
-   sudo chown ubuntu:ubuntu /srv/jva-data
+   mkdir -p /mnt/images/jva_images /mnt/images/jva_data   # sudo, and chown to ubuntu, if needed
    ```
 
-   Check there is room: `df -h /srv`. The derivatives folder on the Mac tells you how much
+   publish.py also creates them if it can, and puts a marker file (`.jva_images`) in the empty
+   `jva_images` folder on its first upload. It deletes images the site no longer uses only in
+   a folder with that marker, so a mistyped `remote_images_dir` (say, `/mnt/images` itself)
+   is refused instead of emptied.
+
+   Apache must be able to read `/mnt/images/jva_images`, as it presumably already reads the
+   other collections there.
+
+   Check there is room: `df -h /mnt/images`. The derivatives folder on the Mac tells you how much
    is needed (`du -sh "/Volumes/TAP PROJECT/_derivatives"`); the public share is a bit less.
 
 4. **Publish from the Mac** (next section) so there is something to show.
@@ -80,7 +88,8 @@ In `config.json` on the Mac, the `publish` section says what and where:
 "publish": {
   "exclude_categories": ["Class", "Unclassified"],
   "server": "ubuntu@jva.johnblowe.com",
-  "remote_dir": "/srv/jva-data"
+  "remote_data_dir": "/mnt/images/jva_data",
+  "remote_images_dir": "/mnt/images/jva_images"
 }
 ```
 

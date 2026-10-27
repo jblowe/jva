@@ -1,9 +1,9 @@
 {
-  "data_dir": "/srv/jva-data",
-  "catalogue": "/srv/jva-data/archive_public.sqlite",
+  "data_dir": "/mnt/images/jva_data",
+  "catalogue": "/mnt/images/jva_data/archive_public.sqlite",
   "app": {
     "mode": "public",
-    "derivatives_roots": ["/srv/jva-data/derivatives"],
+    "derivatives_roots": ["/mnt/images/jva_images"],
     "derivatives_url": "/derivatives",
     "title": "Voelker Archive"
   }

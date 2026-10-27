@@ -17,8 +17,10 @@ Building writes, in "publish": {"out_dir"} (default <data_dir>/public):
     derivatives_files.txt     the derivative files it uses (paths in the derivatives folder)
 
 Uploading (needs ssh access to "publish": {"server"}, e.g. ubuntu@jva.johnblowe.com):
-  1. the images and PDF/RTF copies -> <remote_dir>/derivatives/   (rsync: only what changed)
-  2. the catalogue -> <remote_dir>/archive_public.sqlite, swapped in at once, so the site
+  1. the images and PDF/RTF copies -> "remote_images_dir" (/mnt/images/jva_images), by rsync:
+     only what changed is sent
+  2. the catalogue -> "remote_data_dir"/archive_public.sqlite (/mnt/images/jva_data), swapped
+     in at once, so the site
      never sees half a file; the running app notices the new catalogue by itself
   3. derivative files on the server the new catalogue no longer uses are deleted
      (--keep-old to skip this)
@@ -35,6 +37,7 @@ from jva.config import CONFIG  # noqa: E402
 from jva.publish import LIST_NAME, PUBLIC_NAME, build_public  # noqa: E402
 from jva.catalog import human  # noqa: E402
 
+MARKER = ".jva_images"     # marks the server's images folder as publish.py's own (see upload)
 RSYNC_PERMS = ["--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r"]      # readable by Apache
 
 
@@ -43,33 +46,43 @@ def run(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
 
 
-def upload(out_dir, derivatives_dir, server, remote_dir, keep_old=False, dry_run=False):
+def upload(out_dir, derivatives_dir, server, data_dir, images_dir, keep_old=False, dry_run=False):
     cat, listing = out_dir / PUBLIC_NAME, out_dir / LIST_NAME
     if not cat.exists() or not listing.exists():
         sys.exit(f"Nothing to upload in {out_dir}: run publish.py without --upload-only first.")
     wanted = set(listing.read_text(encoding="utf-8").split("\n")) - {""}
-    rd = remote_dir.rstrip("/")
+    dd, im = data_dir.rstrip("/"), images_dir.rstrip("/")
     dry = ["--dry-run"] if dry_run else []
-    print(f"Uploading to {server}:{rd}")
-    run(["ssh", server, f"mkdir -p '{rd}/derivatives'"])
+    print(f"Uploading to {server}: catalogue to {dd}, images to {im}")
+    # Step 3 deletes files in the images folder, so it must be this archive's own folder, never a
+    # shared parent such as /mnt/images. A new or empty folder is marked as ours; a folder with
+    # other things in it and no mark is refused.
+    state = run(["ssh", server, f"mkdir -p '{dd}' '{im}' && cd '{im}' && "
+                 f"if [ -e {MARKER} ]; then echo ours; elif [ -z \"$(ls -A)\" ]; then touch {MARKER} && echo ours; "
+                 f"else echo other; fi"], capture_output=True).stdout.decode().strip()
+    if state != "ours":
+        sys.exit(f"{server}:{im} already holds other files, and isn't marked as this archive's images "
+                 f"folder ({MARKER}). Check remote_images_dir in config.json: it must be a folder of its "
+                 f"own, e.g. /mnt/images/jva_images. If it really is the right one, create {im}/{MARKER} "
+                 f"on the server and run this again.")
     print(f"1. {len(wanted):,} derivative files (only new or changed ones are sent)")
     run(["rsync", "-rt", "--stats", *RSYNC_PERMS, *dry, f"--files-from={listing}",
-         f"{derivatives_dir}/", f"{server}:{rd}/derivatives/"])
+         f"{derivatives_dir}/", f"{server}:{im}/"])
     print(f"2. the catalogue ({human(cat.stat().st_size)})")
-    run(["rsync", "-t", "--stats", *RSYNC_PERMS, *dry, str(cat), f"{server}:{rd}/{PUBLIC_NAME}.new"])
+    run(["rsync", "-t", "--stats", *RSYNC_PERMS, *dry, str(cat), f"{server}:{dd}/{PUBLIC_NAME}.new"])
     if not dry_run:
-        run(["ssh", server, f"mv -f '{rd}/{PUBLIC_NAME}.new' '{rd}/{PUBLIC_NAME}'"])
+        run(["ssh", server, f"mv -f '{dd}/{PUBLIC_NAME}.new' '{dd}/{PUBLIC_NAME}'"])
     if keep_old:
         return
-    print("3. removing derivative files the site no longer uses")
-    there = run(["ssh", server, f"cd '{rd}/derivatives' && find . -type f -print0"],
+    print(f"3. removing files in {im} the site no longer uses")
+    there = run(["ssh", server, f"cd '{im}' && find . -type f -print0"],
                 capture_output=True).stdout.decode("utf-8", "surrogateescape").split("\0")
-    stale = sorted(p[2:] for p in there if p.startswith("./") and p[2:] not in wanted)
+    stale = sorted(p[2:] for p in there if p.startswith("./") and p[2:] not in wanted and p[2:] != MARKER)
     print(f"   {len(stale):,} to remove")
     if stale and not dry_run:
-        run(["ssh", server, f"cd '{rd}/derivatives' && xargs -0 rm -f --"],
+        run(["ssh", server, f"cd '{im}' && xargs -0 rm -f --"],
             input="\0".join(stale).encode("utf-8", "surrogateescape"))
-        run(["ssh", server, f"find '{rd}/derivatives' -mindepth 1 -type d -empty -delete"])
+        run(["ssh", server, f"find '{im}' -mindepth 1 -type d -empty -delete"])
 
 
 def main():
@@ -84,7 +97,8 @@ def main():
     ap.add_argument("--catalogue", default=str(CONFIG.catalogue))
     ap.add_argument("--out", default=P["out_dir"], help="where to build (default: publish.out_dir)")
     ap.add_argument("--server", default=P["server"])
-    ap.add_argument("--remote-dir", default=P["remote_dir"])
+    ap.add_argument("--remote-data-dir", default=P["remote_data_dir"])
+    ap.add_argument("--remote-images-dir", default=P["remote_images_dir"])
     a = ap.parse_args()
     out = Path(a.out).expanduser()
     deriv = Path(a.derivatives).expanduser() if a.derivatives else None
@@ -107,7 +121,7 @@ def main():
             print(f"  Not in {deriv}: previews for {c['missing_previews']:,} files, "
                   f"{c['missing_docs']:,} PDF/RTF copies (the site shows an icon instead).")
     if a.upload or a.upload_only:
-        upload(out, deriv, a.server, a.remote_dir, keep_old=a.keep_old, dry_run=a.dry_run)
+        upload(out, deriv, a.server, a.remote_data_dir, a.remote_images_dir, keep_old=a.keep_old, dry_run=a.dry_run)
         print("Done." + (" (dry run: nothing was changed on the server)" if a.dry_run else ""))
 
 

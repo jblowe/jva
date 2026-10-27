@@ -12,6 +12,7 @@
   "publish": {
     "exclude_categories": ["Class", "Unclassified"],
     "server": "ubuntu@jva.johnblowe.com",
-    "remote_dir": "/srv/jva-data"
+    "remote_data_dir": "/mnt/images/jva_data",
+    "remote_images_dir": "/mnt/images/jva_images"
   }
 }
