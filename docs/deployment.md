@@ -120,13 +120,24 @@ In `config.json` on the Mac, the `publish` section says what and where:
 "publish": {
   "exclude_categories": ["Class", "Unclassified"],
   "server": "ubuntu@jva.johnblowe.com",
+  "ssh_key": "~/.ssh/jblowe.pem",
   "remote_data_dir": "/mnt/images/jva_data",
   "remote_images_dir": "/mnt/images/jva_images"
 }
 ```
 
-`server` is anything `ssh` accepts, so a Host alias from `~/.ssh/config` (with the EC2 key)
-works too. Check that `ssh ubuntu@jva.johnblowe.com true` works without a password prompt.
+`ssh_key` is the AWS key file ssh logs in with; publish.py passes it to every ssh and rsync
+it runs. Keep it in `~/.ssh` rather than Downloads, readable only by you (ssh refuses it
+otherwise):
+
+```sh
+mkdir -p ~/.ssh && mv ~/Downloads/jblowe.pem ~/.ssh/ && chmod 600 ~/.ssh/jblowe.pem
+ssh -i ~/.ssh/jblowe.pem ubuntu@jva.johnblowe.com true    # must return without asking anything
+```
+
+(Answer "yes" if that first login asks whether to trust the server; publish.py can't.)
+Alternatively, leave `ssh_key` empty and set `server` to a Host alias in `~/.ssh/config`
+that names the key with `IdentityFile`.
 
 Plug in the drive with the derivatives folder, then:
 
@@ -182,4 +193,4 @@ cover the images under `/derivatives/`, not the pages the app makes.
 | Pages work but images are broken (403/404) | `ls -l /mnt/images/jva_images` (Apache must be able to read it); `/var/log/apache2/jva_error.log` |
 | Icons instead of previews for some files | their images weren't in the derivatives folder when you published; publish.py says how many |
 | publish.py stops: "isn't marked" | `remote_images_dir` points at a folder holding other things, see step 3 above |
-| `ssh` asks for a password or is refused | set up the EC2 key for `server` in `~/.ssh/config` on the Mac |
+| publish.py: "ssh couldn't connect or log in" | try `ssh -i ~/.ssh/jblowe.pem ubuntu@jva.johnblowe.com true`; ssh's message says why: "Permission denied" is the key (`ssh_key`), "Could not resolve hostname" is DNS, a timeout is the EC2 security group |

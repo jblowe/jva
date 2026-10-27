@@ -37,6 +37,7 @@ PUBLISH_DEFAULTS = {
     "exclude_categories": ["Class", "Unclassified"],
     "out_dir": None,             # default <data_dir>/public
     "server": "",                # e.g. "ubuntu@jva.johnblowe.com" (ssh destination for rsync)
+    "ssh_key": "",               # e.g. "~/.ssh/jblowe.pem": the key ssh logs in with (ssh -i)
     "remote_data_dir": "/mnt/images/jva_data",       # the public catalogue goes here
     "remote_images_dir": "/mnt/images/jva_images",   # the derivatives (images, PDF/RTF) go here
 }

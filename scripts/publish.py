@@ -27,6 +27,7 @@ Uploading (needs ssh access to "publish": {"server"}, e.g. ubuntu@jva.johnblowe.
 The derivatives folder (derivatives_dir, or -d) must be readable: plug in its drive.
 """
 import argparse
+import shlex
 import subprocess
 import sys
 import time
@@ -53,6 +54,8 @@ def run(cmd, output=False, **kw):
     what it printed. A failure raises UploadFailed with a readable explanation."""
     if cmd[0] == "ssh":
         cmd = ["ssh", *SSH_OPTS, *cmd[1:]]
+    elif cmd[0] == "rsync":                       # rsync logs in the same way
+        cmd = ["rsync", "-e", shlex.join(["ssh", *SSH_OPTS]), *cmd[1:]]
     print("  $ " + " ".join(cmd if len(" ".join(cmd)) < 200 else cmd[:8] + ["..."]), flush=True)
     try:
         r = subprocess.run(cmd, check=True, stdout=subprocess.PIPE if output else None, **kw)
@@ -71,10 +74,13 @@ def check_server(server):
     try:
         run(["ssh", server, "true"])
     except UploadFailed as e:
-        sys.exit(f"{e}\nTry it by hand:  ssh {server} true\n"
-                 "It must log in without asking anything. If you normally log in with a key or a Host\n"
-                 "alias in ~/.ssh/config, set \"server\" in config.json to that alias. Check, too, that the\n"
-                 "name resolves (the DNS record for a new site name may not exist yet).")
+        key = next((SSH_OPTS[k + 1] for k, o in enumerate(SSH_OPTS) if o == "-i"), None)
+        by_hand = f"ssh -i '{key}' {server} true" if key else f"ssh {server} true"
+        sys.exit(f"{e}\nTry it by hand:  {by_hand}\n"
+                 "It must log in without asking anything. If the server needs a key file (an AWS .pem),\n"
+                 "set \"ssh_key\" in config.json's \"publish\" section (or use --ssh-key); a Host alias\n"
+                 "from ~/.ssh/config works as \"server\" too. Check, too, that the name resolves (the\n"
+                 "DNS record for a new site name may not exist yet).")
 
 
 def upload(out_dir, derivatives_dir, server, data_dir, images_dir, keep_old=False, dry_run=False):
@@ -128,6 +134,8 @@ def main():
     ap.add_argument("--catalogue", default=str(CONFIG.catalogue))
     ap.add_argument("--out", default=P["out_dir"], help="where to build (default: publish.out_dir)")
     ap.add_argument("--server", default=P["server"])
+    ap.add_argument("--ssh-key", default=P.get("ssh_key") or "",
+                    help="the private key ssh logs in with (default: publish.ssh_key in config.json)")
     ap.add_argument("--remote-data-dir", default=P["remote_data_dir"])
     ap.add_argument("--remote-images-dir", default=P["remote_images_dir"])
     a = ap.parse_args()
@@ -138,6 +146,13 @@ def main():
     if (a.upload or a.upload_only) and not a.server:
         sys.exit('Say which server to upload to: "publish": {"server": "user@host"} in config.json, or --server.')
 
+    if a.ssh_key:
+        key = Path(a.ssh_key).expanduser()
+        if not key.is_file():
+            sys.exit(f"The ssh key isn't there: {key}")
+        if key.stat().st_mode & 0o077:
+            sys.exit(f"ssh won't use {key} while others can read it. Fix with:  chmod 600 '{key}'")
+        SSH_OPTS[:0] = ["-i", str(key), "-o", "IdentitiesOnly=yes"]
     if a.upload or a.upload_only:
         check_server(a.server)
     if not a.upload_only:

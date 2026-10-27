@@ -119,15 +119,19 @@ class Upload(unittest.TestCase):
     def test_upload_and_prune(self):
         bin_dir = Path(tempfile.mkdtemp())
         ssh = bin_dir / "ssh"
-        ssh.write_text('#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\nexec sh -c "$*"\n')
+        ssh.write_text('#!/bin/sh\nwhile [ "$1" = -o ] || [ "$1" = -i ]; do echo "$1 $2" >> "$SSH_LOG"; shift 2; done\nshift\nexec sh -c "$*"\n')
         ssh.chmod(ssh.stat().st_mode | stat.S_IEXEC)
         images = ROOT / "mnt" / "images"                  # shared with other sites
         (images / "other_site" / "pics").mkdir(parents=True)
         (images / "other_site" / "pics" / "keep.jpg").write_bytes(b"not ours")
-        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        log = bin_dir / "ssh.log"
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", SSH_LOG=str(log))
+        key = bin_dir / "server key.pem"
+        key.write_text("not really a key")
+        key.chmod(0o644)
 
-        def upload(images_dir):
-            return H.run_script("publish", "--upload-only", "-d", str(DERIV), "--server", "fakehost",
+        def upload(images_dir, *extra):
+            return H.run_script("publish", "--upload-only", "-d", str(DERIV), "--server", "fakehost", *extra,
                                 "--remote-data-dir", str(images / "jva_data"),
                                 "--remote-images-dir", str(images_dir), config=CONFIG, env=env)
 
@@ -137,8 +141,16 @@ class Upload(unittest.TestCase):
         self.assertIn("isn't marked", r.stdout + r.stderr)
         self.assertTrue((images / "other_site" / "pics" / "keep.jpg").exists())
 
-        r = upload(images / "jva_images")
+        # a key others can read is refused before anything happens, as ssh itself would
+        r = upload(images / "jva_images", "--ssh-key", str(key))
+        self.assertIn("chmod 600", r.stderr)
+        self.assertFalse((images / "jva_images").exists())
+        key.chmod(0o600)
+
+        r = upload(images / "jva_images", "--ssh-key", str(key))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f"-i {key}", log.read_text())          # ssh and rsync both used the key
+        self.assertGreaterEqual(log.read_text().count(f"-i {key}"), 5)
         self.assertTrue((images / "jva_data" / "archive_public.sqlite").exists())
         self.assertFalse((images / "jva_data" / "archive_public.sqlite.new").exists())
         b = SHA["Burial 2.jpg"][:2]
