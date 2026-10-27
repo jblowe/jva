@@ -102,10 +102,24 @@ class PublicCatalogue(unittest.TestCase):
 class Upload(unittest.TestCase):
     """The upload, with a fake ssh that runs the "remote" commands on this machine."""
 
+    def test_unreachable_server_stops_before_building(self):
+        bin_dir = Path(tempfile.mkdtemp())
+        ssh = bin_dir / "ssh"
+        ssh.write_text('#!/bin/sh\necho "ssh: Could not resolve hostname nowhere" >&2\nexit 255\n')
+        ssh.chmod(ssh.stat().st_mode | stat.S_IEXEC)
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        out = ROOT / "public-unreachable"
+        r = H.run_script("publish", "--upload", "-d", str(DERIV), "--server", "nowhere", "--out", str(out),
+                         config=CONFIG, env=env)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("Could not resolve hostname", r.stderr)        # ssh's own message is shown
+        self.assertIn("ssh couldn't connect", r.stderr)
+        self.assertFalse(out.exists())                               # nothing was built
+
     def test_upload_and_prune(self):
         bin_dir = Path(tempfile.mkdtemp())
         ssh = bin_dir / "ssh"
-        ssh.write_text('#!/bin/sh\nshift\nexec sh -c "$*"\n')
+        ssh.write_text('#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\nexec sh -c "$*"\n')
         ssh.chmod(ssh.stat().st_mode | stat.S_IEXEC)
         images = ROOT / "mnt" / "images"                  # shared with other sites
         (images / "other_site" / "pics").mkdir(parents=True)

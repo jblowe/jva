@@ -41,9 +41,40 @@ MARKER = ".jva_images"     # marks the server's images folder as publish.py's ow
 RSYNC_PERMS = ["--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r"]      # readable by Apache
 
 
-def run(cmd, **kw):
-    print("  $ " + " ".join(cmd if len(" ".join(cmd)) < 200 else cmd[:6] + ["..."]), flush=True)
-    return subprocess.run(cmd, check=True, **kw)
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20"]   # fail at once rather than prompt
+
+
+class UploadFailed(Exception):
+    pass
+
+
+def run(cmd, output=False, **kw):
+    """Run a command, showing it; its errors go straight to the terminal. output=True returns
+    what it printed. A failure raises UploadFailed with a readable explanation."""
+    if cmd[0] == "ssh":
+        cmd = ["ssh", *SSH_OPTS, *cmd[1:]]
+    print("  $ " + " ".join(cmd if len(" ".join(cmd)) < 200 else cmd[:8] + ["..."]), flush=True)
+    try:
+        r = subprocess.run(cmd, check=True, stdout=subprocess.PIPE if output else None, **kw)
+    except FileNotFoundError:
+        raise UploadFailed(f"{cmd[0]} isn't installed here.")
+    except subprocess.CalledProcessError as e:
+        if cmd[0] == "ssh" and e.returncode == 255:
+            raise UploadFailed("ssh couldn't connect or log in (see its message above).")
+        raise UploadFailed(f"{cmd[0]} stopped with exit status {e.returncode} (see its message above).")
+    return r.stdout if output else r
+
+
+def check_server(server):
+    """Before spending minutes on a build: can we log in without a password?"""
+    print(f"Checking that ssh to {server} works")
+    try:
+        run(["ssh", server, "true"])
+    except UploadFailed as e:
+        sys.exit(f"{e}\nTry it by hand:  ssh {server} true\n"
+                 "It must log in without asking anything. If you normally log in with a key or a Host\n"
+                 "alias in ~/.ssh/config, set \"server\" in config.json to that alias. Check, too, that the\n"
+                 "name resolves (the DNS record for a new site name may not exist yet).")
 
 
 def upload(out_dir, derivatives_dir, server, data_dir, images_dir, keep_old=False, dry_run=False):
@@ -59,7 +90,7 @@ def upload(out_dir, derivatives_dir, server, data_dir, images_dir, keep_old=Fals
     # other things in it and no mark is refused.
     state = run(["ssh", server, f"mkdir -p '{dd}' '{im}' && cd '{im}' && "
                  f"if [ -e {MARKER} ]; then echo ours; elif [ -z \"$(ls -A)\" ]; then touch {MARKER} && echo ours; "
-                 f"else echo other; fi"], capture_output=True).stdout.decode().strip()
+                 f"else echo other; fi"], output=True).decode().strip()
     if state != "ours":
         sys.exit(f"{server}:{im} already holds other files, and isn't marked as this archive's images "
                  f"folder ({MARKER}). Check remote_images_dir in config.json: it must be a folder of its "
@@ -76,7 +107,7 @@ def upload(out_dir, derivatives_dir, server, data_dir, images_dir, keep_old=Fals
         return
     print(f"3. removing files in {im} the site no longer uses")
     there = run(["ssh", server, f"cd '{im}' && find . -type f -print0"],
-                capture_output=True).stdout.decode("utf-8", "surrogateescape").split("\0")
+                output=True).decode("utf-8", "surrogateescape").split("\0")
     stale = sorted(p[2:] for p in there if p.startswith("./") and p[2:] not in wanted and p[2:] != MARKER)
     print(f"   {len(stale):,} to remove")
     if stale and not dry_run:
@@ -107,6 +138,8 @@ def main():
     if (a.upload or a.upload_only) and not a.server:
         sys.exit('Say which server to upload to: "publish": {"server": "user@host"} in config.json, or --server.')
 
+    if a.upload or a.upload_only:
+        check_server(a.server)
     if not a.upload_only:
         if not Path(a.catalogue).exists():
             sys.exit(f"Catalogue not found: {a.catalogue}")
@@ -121,7 +154,12 @@ def main():
             print(f"  Not in {deriv}: previews for {c['missing_previews']:,} files, "
                   f"{c['missing_docs']:,} PDF/RTF copies (the site shows an icon instead).")
     if a.upload or a.upload_only:
-        upload(out, deriv, a.server, a.remote_data_dir, a.remote_images_dir, keep_old=a.keep_old, dry_run=a.dry_run)
+        try:
+            upload(out, deriv, a.server, a.remote_data_dir, a.remote_images_dir, keep_old=a.keep_old,
+                   dry_run=a.dry_run)
+        except UploadFailed as e:
+            sys.exit(f"Upload stopped: {e}\nThe build is kept in {out}; once the problem is fixed, "
+                     f"send it with  python3 scripts/publish.py --upload-only")
         print("Done." + (" (dry run: nothing was changed on the server)" if a.dry_run else ""))
 
 
