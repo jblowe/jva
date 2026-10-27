@@ -17,6 +17,20 @@ browser --> Apache :443 jva.johnblowe.com
               everything else   proxied to gunicorn on 127.0.0.1:8007 (systemd unit "jva")
 ```
 
+## Once: on the Mac
+
+The repository lives at `~/GitHub/jva` on the Mac and `~/jva` on the server; GitHub
+(https://github.com/jblowe/jva) is how code gets from one to the other.
+
+```sh
+git clone ~/Claude/Projects/Voelker/jva.bundle ~/GitHub/jva     # or from GitHub, once pushed
+cd ~/GitHub/jva
+git remote set-url origin https://github.com/jblowe/jva.git
+cp config.example.json config.json            # check data_dir, derivatives_dir and "publish"
+python3 scripts/prepare_search.py             # once, for this version
+git push -u origin main                       # so the server can clone it
+```
+
 ## Once: set up the server
 
 1. **DNS.** Add an A record for `jva.johnblowe.com` pointing at the EC2 instance's address
@@ -33,12 +47,21 @@ browser --> Apache :443 jva.johnblowe.com
    cp deploy/server-config.example.json config.json
    ```
 
+   The server's `config.json` says where the public catalogue is
+   (`/mnt/images/jva_data/archive_public.sqlite`), where the images are
+   (`/mnt/images/jva_images`, which Apache serves as `/derivatives`), and that the app runs in
+   public mode. The settings are described in `search-app.md`.
+
 3. **The two folders publish.py uploads to**, beside the other image collections in
    `/mnt/images`: `jva_images` for the derivatives and `jva_data` for the catalogue.
 
    ```sh
-   mkdir -p /mnt/images/jva_images /mnt/images/jva_data   # sudo, and chown to ubuntu, if needed
+   mkdir -p /mnt/images/jva_images /mnt/images/jva_data
    ```
+
+   If `/mnt/images` belongs to root, use `sudo mkdir` and then
+   `sudo chown ubuntu:ubuntu /mnt/images/jva_images /mnt/images/jva_data`: publish.py logs in
+   as `ubuntu` and must be able to write to both.
 
    publish.py also creates them if it can, and puts a marker file (`.jva_images`) in the empty
    `jva_images` folder on its first upload. It deletes images the site no longer uses only in
@@ -129,3 +152,14 @@ The site is open to everyone. To put a password on it, use the commented `<Locat
 block in the Apache file (on the server, in both `jva.johnblowe.com.conf` and the
 `-le-ssl.conf` certbot made). An `.htaccess` file isn't enough on its own: it would only
 cover the images under `/derivatives/`, not the pages the app makes.
+
+## If something goes wrong
+
+| What you see | Where to look |
+|---|---|
+| 502 or 503 from Apache | the app isn't running: `systemctl status jva`, `journalctl -u jva -n 50` |
+| The app says the catalogue isn't there | publish with `--upload` first; check `catalogue` in `~/jva/config.json` |
+| Pages work but images are broken (403/404) | `ls -l /mnt/images/jva_images` (Apache must be able to read it); `/var/log/apache2/jva_error.log` |
+| Icons instead of previews for some files | their images weren't in the derivatives folder when you published; publish.py says how many |
+| publish.py stops: "isn't marked" | `remote_images_dir` points at a folder holding other things, see step 3 above |
+| `ssh` asks for a password or is refused | set up the EC2 key for `server` in `~/.ssh/config` on the Mac |

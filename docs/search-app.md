@@ -70,7 +70,7 @@ python3 scripts/time_queries.py --cat TAP --q anvil
   copies on drives that are plugged in.
 - **Folders**: browse each archive drive's folders the way they sit on disk, with a bar
   showing each folder's mix of categories.
-- **Overview**: totals by category and by archive drive, and whether each drive is plugged in.
+- **Overview**: totals by category and by archive drive, and, on the Mac, whether each drive is plugged in.
 
 Mac `._` files (AppleDouble metadata) are left out everywhere.
 
