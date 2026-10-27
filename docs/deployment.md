@@ -12,9 +12,10 @@ archive_catalog.sqlite --publish.py-->      /mnt/images/jva_data/archive_public.
 _derivatives/ (images, PDF, RTF) --rsync--> /mnt/images/jva_images/
 ~/GitHub/jva  --git push / git pull-->      ~/jva on the server (code, config.json)
 
-browser --> Apache :443 jva.johnblowe.com
-              /derivatives/...  served from /mnt/images/jva_images
-              everything else   proxied to gunicorn on 127.0.0.1:8007 (systemd unit "jva")
+browser --https--> AWS load balancer (holds the certificate)
+                     --http--> Apache :80, vhost jva.johnblowe.com
+                                 /derivatives/...  served from /mnt/images/jva_images
+                                 everything else   proxied to gunicorn on 127.0.0.1:8007 (unit "jva")
 ```
 
 ## Once: on the Mac
@@ -33,8 +34,11 @@ git push -u origin main                       # so the server can clone it
 
 ## Once: set up the server
 
-1. **DNS.** Add an A record for `jva.johnblowe.com` pointing at the EC2 instance's address
-   (the same one the other sites use). Ports 80 and 443 are presumably already open.
+1. **DNS and the load balancer.** Point `jva.johnblowe.com` at the AWS load balancer, the
+   same way as the other sites on this server. The load balancer handles https with its own
+   certificate and passes plain http to Apache, so there is no certificate to set up on the
+   server. Check that its certificate covers `jva.johnblowe.com` (e.g. `*.johnblowe.com`), and
+   if its listener picks a target by host name, add a rule for `jva.johnblowe.com`.
 
 2. **Code and Python.**
 
@@ -107,10 +111,10 @@ git push -u origin main                       # so the server can clone it
    sudo a2enmod proxy proxy_http headers          # already on: no harm
    sudo a2ensite jva.johnblowe.com
    sudo apache2ctl configtest && sudo systemctl reload apache2
-   sudo certbot --apache -d jva.johnblowe.com      # HTTPS, and redirect http to it
+   curl -sI -H 'Host: jva.johnblowe.com' http://localhost/ | head -1   # HTTP/1.1 200 OK
    ```
 
-   Then open https://jva.johnblowe.com/.
+   No certbot: the load balancer does https. Then open https://jva.johnblowe.com/.
 
 ## Every time: publish from the Mac
 
@@ -119,12 +123,16 @@ In `config.json` on the Mac, the `publish` section says what and where:
 ```json
 "publish": {
   "exclude_categories": ["Class", "Unclassified"],
-  "server": "ubuntu@jva.johnblowe.com",
+  "server": "ubuntu@EC2-ADDRESS",
   "ssh_key": "~/.ssh/jblowe.pem",
   "remote_data_dir": "/mnt/images/jva_data",
   "remote_images_dir": "/mnt/images/jva_images"
 }
 ```
+
+`server` is the EC2 instance itself, by its public IP address (put it in place of
+`EC2-ADDRESS`), not `jva.johnblowe.com`: that name leads to the load balancer, which only
+passes on web traffic.
 
 `ssh_key` is the AWS key file ssh logs in with; publish.py passes it to every ssh and rsync
 it runs. Keep it in `~/.ssh` rather than Downloads, readable only by you (ssh refuses it
@@ -132,7 +140,7 @@ otherwise):
 
 ```sh
 mkdir -p ~/.ssh && mv ~/Downloads/jblowe.pem ~/.ssh/ && chmod 600 ~/.ssh/jblowe.pem
-ssh -i ~/.ssh/jblowe.pem ubuntu@jva.johnblowe.com true    # must return without asking anything
+ssh -i ~/.ssh/jblowe.pem ubuntu@EC2-ADDRESS true    # must return without asking anything
 ```
 
 (Answer "yes" if that first login asks whether to trust the server; publish.py can't.)
@@ -180,8 +188,8 @@ sudo systemctl restart jva
 ## Restricting access later
 
 The site is open to everyone. To put a password on it, use the commented `<Location />`
-block in the Apache file (on the server, in both `jva.johnblowe.com.conf` and the
-`-le-ssl.conf` certbot made). An `.htaccess` file isn't enough on its own: it would only
+block in the Apache file (`/etc/apache2/sites-available/jva.johnblowe.com.conf` on the
+server). An `.htaccess` file isn't enough on its own: it would only
 cover the images under `/derivatives/`, not the pages the app makes.
 
 ## If something goes wrong
@@ -193,4 +201,5 @@ cover the images under `/derivatives/`, not the pages the app makes.
 | Pages work but images are broken (403/404) | `ls -l /mnt/images/jva_images` (Apache must be able to read it); `/var/log/apache2/jva_error.log` |
 | Icons instead of previews for some files | their images weren't in the derivatives folder when you published; publish.py says how many |
 | publish.py stops: "isn't marked" | `remote_images_dir` points at a folder holding other things, see step 3 above |
-| publish.py: "ssh couldn't connect or log in" | try `ssh -i ~/.ssh/jblowe.pem ubuntu@jva.johnblowe.com true`; ssh's message says why: "Permission denied" is the key (`ssh_key`), "Could not resolve hostname" is DNS, a timeout is the EC2 security group |
+| publish.py: "ssh couldn't connect or log in" | try `ssh -i ~/.ssh/jblowe.pem ubuntu@EC2-ADDRESS true`; ssh's message says why: "Permission denied" is the key (`ssh_key`), a timeout is the EC2 security group or the wrong address (`server` must be the instance, not the site name) |
+| The site gives the load balancer's error page | the load balancer doesn't send `jva.johnblowe.com` to this server (its listener rules or target group), or Apache isn't answering on port 80 |

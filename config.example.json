@@ -11,7 +11,7 @@
   },
   "publish": {
     "exclude_categories": ["Class", "Unclassified"],
-    "server": "ubuntu@jva.johnblowe.com",
+    "server": "ubuntu@EC2-ADDRESS",
     "ssh_key": "~/.ssh/jblowe.pem",
     "remote_data_dir": "/mnt/images/jva_data",
     "remote_images_dir": "/mnt/images/jva_images"
