@@ -2,8 +2,8 @@
 """
 prepare_search.py -- add what the search app needs to be fast to archive_catalog.sqlite.
 
-    python3 prepare_search.py                 # uses the catalogue named in config.json
-    python3 prepare_search.py --catalogue /path/to/archive_catalog.sqlite
+    python3 scripts/prepare_search.py                 # uses the catalogue named in config.json
+    python3 scripts/prepare_search.py --catalogue /path/to/archive_catalog.sqlite
 
 identify_archive.py does the same at the end of every run. Run it by hand only if that step
 failed, or the first time. Without it the search app still works, just more slowly (it notices

@@ -2,7 +2,7 @@
 """
 make_derivatives.py -- web-friendly preview images ("derivatives") for the archive.
 
-  python3 make_derivatives.py -a "TAP 4T 2019" -d "/Volumes/TAP 4T 2019/derivatives"
+  python3 scripts/make_derivatives.py -a "TAP 4T 2019" -d "/Volumes/TAP 4T 2019/derivatives"
 
   -a, --archive NAME   archive volume whose files to work from (required); one per run,
                        like the other scripts. Files whose copies are all on other archive

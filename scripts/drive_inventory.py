@@ -3,8 +3,8 @@
 drive_inventory.py -- inventory one external drive and copy it onto an archive drive (macOS).
 
 Plug in ONE source drive (the archive drive stays mounted too), then:
-  python3 drive_inventory.py -a "ARCHIVE VOLUME"                 # finds the source drive itself
-  python3 drive_inventory.py -a "ARCHIVE VOLUME" /Volumes/Foo    # or name it explicitly
+  python3 scripts/drive_inventory.py -a "ARCHIVE VOLUME"                 # finds the source drive itself
+  python3 scripts/drive_inventory.py -a "ARCHIVE VOLUME" /Volumes/Foo    # or name it explicitly
 
   -a, --archive NAME   the archive volume to copy onto (required): a name in /Volumes or a path.
                        Copies go to the root of that volume:  /Volumes/NAME/<drive name>/
@@ -198,7 +198,7 @@ def find_source(archive_vol, other_archives=()):
         sys.exit(f"No source drive found (only {archive_vol} is mounted?).")
     if len(cands) > 1:
         sys.exit("More than one source drive mounted:\n  " + "\n  ".join(map(str, cands)) +
-                 "\nEject the extras, or name one: python3 drive_inventory.py -a ... '/Volumes/...'")
+                 "\nEject the extras, or name one: python3 scripts/drive_inventory.py -a ... '/Volumes/...'")
     return cands[0]
 
 

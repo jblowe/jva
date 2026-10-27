@@ -9,28 +9,44 @@ archive drive you name, at the root of that volume:
 (On TAP 4T 2019, the drives archived so far are in `CumulativeArchive/`; use
 `--folder CumulativeArchive` to keep adding them there.)
 
-All inventories and logs are kept here, in `/Users/johnlowe/Claude/Projects/Voelker`.
+The scripts are in `scripts/` in this repository (cloned to `~/GitHub/jva`). Run them from
+the top of the repository, e.g. `python3 scripts/identify_archive.py`. The inventories,
+reports and the catalogue live in the data folder, not in the repository: `data_dir` in
+`config.json` names it (`/Users/johnlowe/Claude/Projects/Voelker`). Copy
+`config.example.json` to `config.json` once and adjust it; every script and the search app
+read it.
 
-Both scripts are plain Python 3 (standard library only, nothing to install) and are
-written for macOS.
+The scripts are plain Python 3 (standard library only, nothing to install) and are
+written for macOS. The search app needs Flask: `python3 -m pip install -r requirements.txt`.
 
 ## Files
 
+In the repository:
+
 | File | What it is |
 |---|---|
-| `search_app/` | The search app: search and browse the catalogue in a web browser, with previews (see "Searching the archive" and `search_app/README.md`) |
-| `classify_archive.py` + `classify_rules.csv` | Sorts files into TAP / SE Asian Archaeology / Other Archaeology / Class / Museum / Other (see "Classifying by subject") |
-| `check_tiffs.py`, `repair_tiffs.py` | Find TIFFs with a damaged directory (the kind macOS Preview won't open) and repair them (see "Damaged TIFFs") |
-| `delete_files.py` | Deletes files you list (or delete in the search app) from the archive drives, and updates the catalogue (see "Deleting files") |
-| `free_space.py` | Removes extra copies of identical files on an archive drive, with a record of each (see "Freeing space") |
-| `make_derivatives.py` | Makes WebP thumbnails and previews for the search app, recorded in the catalogue (see "Preview images" below) |
-| `identify_archive.py` | Catalogues, de-duplicates and identifies the formats of everything on the archive drives, one drive at a time, into one shared catalogue (see below) |
-| `drive_inventory.py` | Inventories one source drive, copies it onto an archive drive, and updates the summary |
+| `scripts/drive_inventory.py` | Inventories one source drive, copies it onto an archive drive, and updates the summary |
+| `scripts/identify_archive.py` | Catalogues, de-duplicates and identifies the formats of everything on the archive drives, one drive at a time, into one shared catalogue (see below) |
+| `scripts/classify_archive.py` + `rules/classify_rules.csv` | Sorts files into TAP / SE Asian Archaeology / Other Archaeology / Class / Museum / Other (see "Classifying by subject") |
+| `scripts/make_derivatives.py` | Makes WebP thumbnails and previews for the search app, recorded in the catalogue (see "Preview images" below) |
+| `scripts/free_space.py` | Removes extra copies of identical files on an archive drive, with a record of each (see "Freeing space") |
+| `scripts/delete_files.py` | Deletes files you list (or delete in the search app) from the archive drives, and updates the catalogue (see "Deleting files") |
+| `scripts/check_tiffs.py`, `scripts/repair_tiffs.py` | Find TIFFs with a damaged directory (the kind macOS Preview won't open) and repair them (see "Damaged TIFFs") |
+| `scripts/prepare_search.py`, `scripts/time_queries.py` | Helper tables that keep the search app fast, and a timer for its queries |
+| `scripts/publish.py` | Puts the public part of the archive on the web server (see `docs/deployment.md`) |
+| `webapp/` | The search app: search and browse the catalogue in a web browser, with previews (see "Searching the archive" and `docs/search-app.md`) |
+| `jva/` | Code the scripts and the search app share: the catalogue's tables, drive checks, file kinds, TIFF repair, deletion, ... |
+| `tests/` | Tests on a small made-up archive: `python3 -m unittest discover -s tests` |
+
+In the data folder:
+
+| File | What it is |
+|---|---|
+| `archive_catalog.sqlite` | The catalogue (see "The catalogue" below) |
 | `drive_summary.csv` | **The main spreadsheet:** one row per drive, plus a TOTAL row. Rebuilt after every run |
 | `drives.csv` | One row per run (so a drive may appear more than once): full details |
 | `archive_map.csv` | Which source drive (by volume UUID) went into which folder on which archive drive. **Don't delete it.** |
 | `<drive name>.csv` | Every file on that drive: path, type, size, dates, permissions, plus a row for anything that couldn't be read or copied (see below). Named like the drive's archive folder; rerunning a drive replaces it |
-| `old/` | Earlier versions of the scripts, including the retired `summarize_drives.py`. Safe to delete |
 
 ## One-time setup
 
@@ -48,10 +64,10 @@ needed there:
 3. Run, naming the archive drive (required):
 
        cd /Users/johnlowe/Claude/Projects/Voelker
-       python3 drive_inventory.py -a "TAP 4T 2019" --folder CumulativeArchive >> archive_log.txt
-       python3 drive_inventory.py -a "<other archive drive>" >> archive_log.txt
+       python3 scripts/drive_inventory.py -a "TAP 4T 2019" --folder CumulativeArchive >> ~/Claude/Projects/Voelker/archive_log.txt
+       python3 scripts/drive_inventory.py -a "<other archive drive>" >> ~/Claude/Projects/Voelker/archive_log.txt
 
-   Progress shows in the terminal. The `>> archive_log.txt` part saves the one-line
+   Progress shows in the terminal. The `>> ~/Claude/Projects/Voelker/archive_log.txt` part saves the one-line
    result of each run, giving you a running log.
 4. Folder names must be unique across **all** archive drives, since they share one
    catalogue. If the drive's name is already used, the script prints
@@ -114,7 +130,7 @@ When the run ends, the script prints one line, for example:
 
 Run this with the source drive plugged in, while nothing else is copying:
 
-    python3 drive_inventory.py -a "TAP 4T 2019" --speedtest
+    python3 scripts/drive_inventory.py -a "TAP 4T 2019" --speedtest
 
 It reads about 1 GB of large files from the source drive, writes 1 GB to the archive drive, and
 reports both speeds, so you can see which drive is holding things up. It deletes its test
@@ -132,7 +148,7 @@ file afterwards. Typical causes:
 
 ## Options
 
-    python3 drive_inventory.py -a "ARCHIVE DRIVE" [/Volumes/SomeDrive] [options]
+    python3 scripts/drive_inventory.py -a "ARCHIVE DRIVE" [/Volumes/SomeDrive] [options]
 
 | Option | Effect |
 |---|---|
@@ -153,8 +169,8 @@ file afterwards. Typical causes:
 ## Identifying and de-duplicating the archive
 
     brew install richardlehane/digipres/siegfried   # once; the format identifier
-    python3 identify_archive.py -a "TAP 4T 2019"
-    python3 identify_archive.py -a "<other archive drive>"
+    python3 scripts/identify_archive.py -a "TAP 4T 2019"
+    python3 scripts/identify_archive.py -a "<other archive drive>"
 
 The archive drive is required: the script processes one archive drive per run, reading
 **everything on that volume from its root** (it never writes to it). All archive drives
@@ -223,7 +239,7 @@ archive drive needed), and `--skip-identify` to skip step 3.
 - **`unique_search`**: a full-text index over `unique_files` (names, other names, folders,
   locations, format, extension), for fast word searches.
 - **`unique_archives`**, **`unique_drives`**, `unique_files.kind` and `search_meta`: helper
-  tables for the search app, rebuilt by `search_app/prepare_search.py`, which
+  tables for the search app, rebuilt by `scripts/prepare_search.py`, which
   `identify_archive.py` runs at the end of every run (step 6).
 
 Clutter files are not in `unique_files`; their `unique_id` is empty. Some examples:
@@ -254,7 +270,7 @@ be mixed up; the script refuses and asks you to rename one.
 
     brew install imagemagick ghostscript      # once (qlmanage and sips come with macOS)
     brew install --cask libreoffice           # once, for Canvas drawings and old Mac Word files
-    python3 make_derivatives.py -a "TAP 4T 2019" -d "/Volumes/TAP 4T 2019/derivatives"
+    python3 scripts/make_derivatives.py -a "TAP 4T 2019" -d "/Volumes/TAP 4T 2019/derivatives"
 
 Makes web-friendly preview images for the archive, for the search app. Like the other
 scripts it works on one archive drive at a time (`-a`, required). `-d` (required) is
@@ -338,7 +354,7 @@ drive. Don't run it while another script is using the same drive.
 
 ## Classifying by subject (TAP vs. the rest)
 
-    python3 classify_archive.py
+    python3 scripts/classify_archive.py
 
 Sorts every file in the catalogue into **TAP**, **SE Asian Archaeology** (other than TAP),
 **Other Archaeology**, **Class** (course materials), **Museum** (exhibits, displays,
@@ -346,7 +362,7 @@ collections work, museum photography), **Other**, or **Unclassified**. It
 works from the catalogue alone (no drive needed), so rerun it whenever you edit the rules
 or after cataloguing more.
 
-The rules are in **`classify_rules.csv`**, which you can edit. Each line is a pattern (matched
+The rules are in **`rules/classify_rules.csv`** (or the file `rules` in `config.json` names), which you can edit. Each line is a pattern (matched
 against folder and file names, ignoring case), a category, and a strength:
 **strong** (a specific name: a site, project or course number), **broad** (a wide TAP net
 such as "Thai", "slide scan" or "notebook" that loses to a strong match of another category
@@ -394,8 +410,8 @@ and `unique_files.category`) and into two CSVs:
 
 ## Freeing space: removing extra copies
 
-    python3 free_space.py -a "TAP 4T 2019" --target-gb 100            # dry run: the plan
-    python3 free_space.py -a "TAP 4T 2019" --target-gb 100 --apply    # do it
+    python3 scripts/free_space.py -a "TAP 4T 2019" --target-gb 100            # dry run: the plan
+    python3 scripts/free_space.py -a "TAP 4T 2019" --target-gb 100 --apply    # do it
 
 Removes extra copies of identical files on one archive drive, largest first, until the
 target is reached (or `--all`). On each drive it keeps one copy of every file, chosen in
@@ -421,12 +437,12 @@ never as real files. `--no-stubs` leaves nothing behind instead. Every removal i
 catalogue table `removed_copies` (path, checksum, size, dates, category, and which copy was
 kept), so the search app can still show where a file used to be, and
 `drive_inventory.py --redo` won't copy it back. Copies that came from a source drive are
-still on that source drive. Afterwards, run `python3 identify_archive.py --reports` to
+still on that source drive. Afterwards, run `python3 scripts/identify_archive.py --reports` to
 refresh `unique_files` and the reports.
 
 ## Deleting files
 
-    python3 delete_files.py to_delete.txt --reason "not part of the archive"
+    python3 scripts/delete_files.py to_delete.txt --reason "not part of the archive"
 
 `to_delete.txt` lists what to delete, one path per line (or a CSV file with a `path` column),
 written as the search app shows it (`TAP 4T 2019: CumulativeArchive/JUDY 3/...`), as a full
@@ -446,8 +462,8 @@ have no Trash.
 
 ## Damaged TIFFs
 
-    python3 check_tiffs.py        # reads only; writes tiff_check.csv
-    python3 repair_tiffs.py       # repairs the files listed there (asks first)
+    python3 scripts/check_tiffs.py        # reads only; writes tiff_check.csv
+    python3 scripts/repair_tiffs.py       # repairs the files listed there (asks first)
 
 `check_tiffs.py` reads the header and directory of every TIFF on the archive drives that are
 plugged in (one copy of each distinct file), not the images, and lists in `tiff_check.csv`
@@ -467,14 +483,14 @@ repaired later by running both scripts again with that drive. Files listed as "n
 
 ## Searching the archive
 
-The search app in `search_app/` lets you search and browse the catalogue in a web browser:
+The search app in `webapp/` lets you search and browse the catalogue in a web browser:
 
-    python3 -m pip install flask          # once
-    cd search_app
-    python3 prepare_search.py             # once; identify_archive.py repeats it after each run
-    python3 archive_search.py             # then open http://127.0.0.1:5000
+    python3 -m pip install -r requirements.txt   # once
+    python3 scripts/prepare_search.py            # once; identify_archive.py repeats it after each run
+    python3 webapp/app.py                        # then open the address it prints
 
-`search_app/README.md` has the details, the settings, and notes on running it on a server.
+`docs/search-app.md` has the details and the settings; `docs/deployment.md` covers the
+public copy on jva.johnblowe.com.
 
 ## Summary spreadsheet
 
@@ -492,7 +508,7 @@ Every number column holds a plain number: sizes are decimal GB (1 GB = 1,000,000
 bytes, as Finder reports), with no units or text, so they sort and add up in Excel or
 Numbers. To rebuild it without a drive plugged in:
 
-    python3 drive_inventory.py --summary-only
+    python3 scripts/drive_inventory.py --summary-only
 
 ## Notes
 

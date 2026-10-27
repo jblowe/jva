@@ -3,8 +3,8 @@
 identify_archive.py -- catalogue, de-duplicate and identify the formats of everything on
 the archive drives, one drive at a time, into ONE cumulative catalogue.
 
-  python3 identify_archive.py -a "TAP 4T 2019"             # scan, hash, identify, reports
-  python3 identify_archive.py --reports                    # just rebuild unique_files + reports
+  python3 scripts/identify_archive.py -a "TAP 4T 2019"             # scan, hash, identify, reports
+  python3 scripts/identify_archive.py --reports                    # just rebuild unique_files + reports
 
   -a, --archive NAME   the archive volume to process (required, except with --reports):
                        a name in /Volumes, or a path. Everything on the volume, from its root,

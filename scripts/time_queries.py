@@ -2,9 +2,9 @@
 """
 time_queries.py -- time each query the search page runs, using the app's own code.
 
-    python3 time_queries.py                     # the Museum click
-    python3 time_queries.py --cat ""            # the unfiltered All files page
-    python3 time_queries.py --cat TAP --q anvil
+    python3 scripts/time_queries.py                     # the Museum click
+    python3 scripts/time_queries.py --cat ""            # the unfiltered All files page
+    python3 scripts/time_queries.py --cat TAP --q anvil
 
 Runs the page's queries twice: the first run is closer to a fresh start, the second shows the
 effect of the disk cache. Prints SQLite's plan for each query. Works without Flask installed.

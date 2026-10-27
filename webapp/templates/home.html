@@ -28,7 +28,7 @@
   <h2>Preview images</h2>
   <p>{% for s, n in deriv %}{{ "{:,}".format(n) }} {{ s }}{{ ", " if not loop.last else "" }}{% endfor %} — of {{ "{:,}".format(total[0] or 0) }} distinct files.</p>
   {% endif %}
-  {% if not prepared %}<p class="muted">Searching would be faster: run <code>python3 prepare_search.py</code> in the search_app folder.</p>{% endif %}
+  {% if not prepared %}<p class="muted">Searching would be faster: run <code>python3 scripts/prepare_search.py</code>.</p>{% endif %}
   {% if removed and removed[0] %}<p class="muted">{{ "{:,}".format(removed[0]) }} extra copies removed to save space ({{ removed[1]|human }}).</p>{% endif %}
 </section>
 {% endblock %}

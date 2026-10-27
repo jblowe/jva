@@ -3,8 +3,8 @@
 free_space.py -- free space on an archive drive by removing extra copies of identical files,
 keeping one copy of each on that drive and a record of every copy removed.
 
-  python3 free_space.py -a "TAP 4T 2019" --target-gb 100            # dry run: shows the plan
-  python3 free_space.py -a "TAP 4T 2019" --target-gb 100 --apply    # actually remove
+  python3 scripts/free_space.py -a "TAP 4T 2019" --target-gb 100            # dry run: shows the plan
+  python3 scripts/free_space.py -a "TAP 4T 2019" --target-gb 100 --apply    # actually remove
 
   -a, --archive NAME   the archive drive (required)
   --target-gb N        remove the largest extra copies until N GB are freed

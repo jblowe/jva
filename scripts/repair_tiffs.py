@@ -2,9 +2,9 @@
 """
 repair_tiffs.py -- repair the TIFFs that check_tiffs.py found with a bad internal pointer.
 
-  python3 repair_tiffs.py              # reads tiff_check.csv, shows what it will do, asks
-  python3 repair_tiffs.py --yes        # no question
-  python3 repair_tiffs.py --undo       # put every repaired file back exactly as it was
+  python3 scripts/repair_tiffs.py              # reads tiff_check.csv, shows what it will do, asks
+  python3 scripts/repair_tiffs.py --yes        # no question
+  python3 scripts/repair_tiffs.py --undo       # put every repaired file back exactly as it was
 
 What is wrong with these files: a TIFF's directory has entries that point to further
 directories -- Exif (camera/scanner details), GPS, Interoperability, sub-images. In these files

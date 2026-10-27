@@ -3,8 +3,8 @@
 classify_archive.py -- sort every file in the catalogue into TAP / SE Asian Archaeology /
 Other Archaeology / Class / Museum / Other / Unclassified, using the rules in classify_rules.csv.
 
-  python3 classify_archive.py            # classify everything in archive_catalog.sqlite
-  python3 classify_archive.py --rules my_rules.csv
+  python3 scripts/classify_archive.py            # classify everything in archive_catalog.sqlite
+  python3 scripts/classify_archive.py --rules my_rules.csv
 
 No drive needs to be mounted: it works from the catalogue only, so rerun it whenever you
 edit the rules or after identify_archive.py has catalogued more.

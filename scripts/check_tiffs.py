@@ -2,9 +2,9 @@
 """
 check_tiffs.py -- find damaged TIFF files in the archive.
 
-  python3 check_tiffs.py                    # every TIFF on the archive drives plugged in
-  python3 check_tiffs.py -a "TAP PROJECT"   # only copies on this archive drive
-  python3 check_tiffs.py --file x.tif       # just one file, with details
+  python3 scripts/check_tiffs.py                    # every TIFF on the archive drives plugged in
+  python3 scripts/check_tiffs.py -a "TAP PROJECT"   # only copies on this archive drive
+  python3 scripts/check_tiffs.py --file x.tif       # just one file, with details
 
 For each distinct TIFF in the catalogue (identical copies are checked once, using a copy on a
 drive that is plugged in) it reads the file's header and directory -- not the image itself,

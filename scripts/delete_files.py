@@ -2,9 +2,9 @@
 """
 delete_files.py -- delete files from the archive drives and keep the catalogue up to date.
 
-  python3 delete_files.py to_delete.txt                      # shows what would go, asks, deletes
-  python3 delete_files.py to_delete.txt --reason "personal"  # recorded with each deletion
-  python3 delete_files.py to_delete.txt --yes                # no question
+  python3 scripts/delete_files.py to_delete.txt                      # shows what would go, asks, deletes
+  python3 scripts/delete_files.py to_delete.txt --reason "personal"  # recorded with each deletion
+  python3 scripts/delete_files.py to_delete.txt --yes                # no question
 
 The list is a text file with one path per line (blank lines and lines starting with # are
 ignored), or a CSV file with a "path" column (and optionally an "archive" column). Each path
