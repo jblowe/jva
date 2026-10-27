@@ -21,17 +21,15 @@ The catalogue is opened read-only (deleting, in local mode, uses scripts/delete_
 On a server it runs under gunicorn: see deploy/ and docs/deployment.md.
 """
 import functools
-import json
 import mimetypes
 import os
 import re
 import sqlite3
 import subprocess
 import sys
-import time
 from pathlib import Path
 
-from flask import Flask, abort, g, jsonify, render_template, request, send_file, url_for
+from flask import Flask, abort, g, jsonify, render_template, request, send_file
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -50,9 +48,10 @@ CFG = load_config()
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
-CATEGORIES = ["TAP", "SE Asian Archaeology", "Other Archaeology", "Museum", "Class", "Other",
-              "Unclassified"]
-from jva.kinds import KINDS, RULES_VERSION, SEASONS, SITES, kind_of  # noqa: E402  (shared with prepare_search.py)
+from jva import volumes  # noqa: E402
+from jva.catalog import DISPLAY_CATEGORIES as CATEGORIES, human  # noqa: E402
+from jva.kinds import KINDS, SEASONS, SITES, kind_of  # noqa: E402
+from jva.search_prep import is_prepared as _tables_ready  # noqa: E402
 
 
 PLACEHOLDER_FOR_KIND = {"Image": "image", "PDF": "document", "Document": "document",
@@ -99,18 +98,7 @@ def catalogue_stamp():
 def prepared(_stamp):
     """True when prepare_search.py's tables exist and match the current unique_files."""
     with app.app_context():
-        con = db()
-        try:
-            if "kind" not in {r[1] for r in con.execute("PRAGMA table_info(unique_files)")}:
-                return False
-            meta = dict(con.execute("SELECT key, value FROM search_meta").fetchall())
-            n, mx = con.execute("SELECT COUNT(*), MAX(id) FROM unique_files").fetchone()
-            con.execute("SELECT 1 FROM unique_drives LIMIT 1").fetchall()
-            con.execute("SELECT 1 FROM unique_tags LIMIT 1").fetchall()
-            return (meta.get("unique_count") == str(n) and meta.get("unique_max_id") == str(mx)
-                    and meta.get("version") == str(RULES_VERSION))
-        except sqlite3.OperationalError:
-            return False
+        return _tables_ready(db())
 
 
 def is_prepared():
@@ -130,15 +118,7 @@ def cat_in(vals):
 def mounted(archive):
     if CFG["mode"] != "local":
         return False
-    return os.path.ismount(os.path.join(CFG["volumes_root"], archive))
-
-
-def human(n):
-    n = float(n or 0)
-    for unit in ("bytes", "KB", "MB", "GB", "TB"):
-        if n < 1000 or unit == "TB":
-            return f"{int(n)} bytes" if unit == "bytes" else f"{n:.1f} {unit}"
-        n /= 1000
+    return volumes.is_mounted(archive, CFG["volumes_root"])
 
 
 app.jinja_env.filters["human"] = human
@@ -458,14 +438,10 @@ app.jinja_env.globals["allows_delete"] = allows_delete()
 def delete():
     """Delete one copy (id = files.id) or every copy of a distinct file (uid = unique_files.id)
     from the archive drives, with their "._" companions, and update the catalogue. Uses
-    scripts/delete_files.py, which records each deletion."""
+    jva/deletion.py (as scripts/delete_files.py does), which records each deletion."""
     if not allows_delete():
         return jsonify(ok=False, message="Deleting is switched off here."), 403
-    sys.path.insert(0, str(REPO / "scripts"))
-    try:
-        import delete_files as D
-    except ImportError:
-        return jsonify(ok=False, message="scripts/delete_files.py is missing from the repository."), 500
+    from jva import deletion as D
     fid, uid = request.form.get("id", type=int), request.form.get("uid", type=int)
     reason = (request.form.get("reason") or "").strip()[:200]
     con = sqlite3.connect(CFG["catalogue"], timeout=30)

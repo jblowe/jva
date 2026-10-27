@@ -49,11 +49,8 @@ Progress goes to STDERR; a one-line result goes to STDOUT. Standard library only
 """
 import argparse
 import csv
-import ctypes
-import ctypes.util
 import hashlib
 import os
-import plistlib
 import shutil
 import sqlite3
 import stat
@@ -65,6 +62,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva.catalog import FILE_COLS, FILES as SCHEMA, gb, is_clutter, log, write_csv  # noqa: E402
+from jva.search_prep import prepare  # noqa: E402
+from jva.unique import build_unique  # noqa: E402
+from jva import volumes  # noqa: E402
+from jva.volumes import diskutil  # noqa: E402
+from jva.macfiles import mac_codes, make_xattr_reader  # noqa: E402
+
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 # catalogues made before archive drives were tracked: all files were on this volume,
 # with paths relative to this folder
@@ -73,70 +77,9 @@ LEGACY_ARCHIVE = ("TAP 4T 2019", "CumulativeArchive")
 SKIP_DIRS = {".Spotlight-V100", ".fseventsd", ".Trashes", ".DocumentRevisions-V100",
              ".TemporaryItems", ".MobileBackups", "$RECYCLE.BIN", "System Volume Information",
              ".PKInstallSandboxManager", ".PKInstallSandboxManager-SystemSoftware"}
-# catalogued, but never counted as duplicates (system clutter)
-JUNK_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini", "Icon\r", ".localized", "ehthumbs.db"}
-
-
-def is_clutter(name, size):
-    """Catalogued, but never treated as content: system files, empty files, and every hidden
-    dot-file -- above all the "._" AppleDouble files exFAT drives keep next to Mac files. A
-    "._" file holds the Mac type/creator codes and resource fork of the file it sits beside;
-    the scan reads those into that file's own row (mac_type, mac_creator, rsrc_bytes)."""
-    return name in JUNK_NAMES or size == 0 or name.startswith(".")
 ROOT_UNIT = ""                     # "unit" of files lying directly in the volume root
 # make_derivatives.py puts this file in its output folder; such folders are never catalogued
 DERIV_MARKER = ".archive-derivatives"
-
-FILE_COLS = """
-  id INTEGER PRIMARY KEY,
-  archive TEXT, unit TEXT, drive TEXT, path TEXT, name TEXT, ext TEXT,
-  size INTEGER, mtime REAL, modified TEXT, junk INTEGER,
-  mac_type TEXT, mac_creator TEXT, rsrc_bytes INTEGER,
-  sha256 TEXT, hash_error TEXT,
-  puid TEXT, format TEXT, format_version TEXT, mime TEXT, id_basis TEXT, id_warning TEXT,
-  id_tool TEXT, id_error TEXT, created TEXT, unique_id INTEGER,
-  UNIQUE(archive, path)"""
-
-SCHEMA = f"""
-CREATE TABLE IF NOT EXISTS files({FILE_COLS});
-CREATE INDEX IF NOT EXISTS i_size ON files(size);
-CREATE INDEX IF NOT EXISTS i_sha ON files(sha256);
-CREATE INDEX IF NOT EXISTS i_unit ON files(archive, unit);
-CREATE INDEX IF NOT EXISTS i_drive ON files(archive, drive);
-CREATE INDEX IF NOT EXISTS i_puid ON files(puid);
-CREATE INDEX IF NOT EXISTS i_unique ON files(unique_id);
-CREATE TABLE IF NOT EXISTS archives(name TEXT PRIMARY KEY, uuid TEXT, last_scan TEXT);
-"""
-
-
-def log(*a):
-    print(*a, file=sys.stderr, flush=True)
-
-
-def gb(n):
-    return round((n or 0) / 1e9, 6)
-
-
-def plain(v):
-    return f"{v:.6f}".rstrip("0").rstrip(".") if isinstance(v, float) else v
-
-
-def write_csv(path, header, rows):
-    with open(path, "w", newline="", encoding="utf-8-sig") as fh:
-        w = csv.writer(fh)
-        w.writerow(header)
-        for r in rows:
-            w.writerow([plain(v) for v in r])
-
-
-def diskutil(target):
-    try:
-        out = subprocess.run(["diskutil", "info", "-plist", str(target)],
-                             capture_output=True, check=True).stdout
-        return plistlib.loads(out)
-    except Exception:
-        return {}
-
 
 # ---------- catalogue setup / migration ----------
 
@@ -245,47 +188,6 @@ def relabel(db, archive, sdirs):
 
 
 # ---------- classic Mac metadata (Finder type/creator, resource fork) ----------
-
-def make_xattr_reader():
-    if sys.platform == "darwin":
-        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
-        fn = libc.getxattr
-        fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t,
-                       ctypes.c_uint32, ctypes.c_int]
-        fn.restype = ctypes.c_ssize_t
-        NOFOLLOW = 0x0001
-
-        def get(path, name, size_only=False):
-            p, n = os.fsencode(path), name.encode()
-            size = fn(p, n, None, 0, 0, NOFOLLOW)
-            if size < 0:
-                return None
-            if size_only:
-                return size
-            buf = ctypes.create_string_buffer(size)
-            got = fn(p, n, buf, size, 0, NOFOLLOW)
-            return buf.raw[:got] if got >= 0 else None
-        return get
-
-    def get(path, name, size_only=False):          # Linux, for testing
-        try:
-            v = os.getxattr(path, "user." + name, follow_symlinks=False)
-        except (OSError, AttributeError):
-            return None
-        return len(v) if size_only else v
-    return get
-
-
-def mac_codes(xattr, path):
-    fi = xattr(path, "com.apple.FinderInfo")
-    t = c = ""
-    if fi and len(fi) >= 8 and fi[:4] != b"\0\0\0\0":
-        t, c = fi[:4].decode("mac_roman"), fi[4:8].decode("mac_roman")
-    rs = xattr(path, "com.apple.ResourceFork", size_only=True) or 0
-    return t, c, rs
-
-
-# ---------- 1. scan ----------
 
 def walk_files(top, recursive=True):
     stack = [top]
@@ -530,123 +432,6 @@ def _run_file(root, rows):
 
 # ---------- unique files (one row per distinct file) ----------
 
-UNIQUE_SCHEMA = """
-DROP TABLE IF EXISTS unique_search;
-DROP TABLE IF EXISTS unique_files;
-CREATE TABLE unique_files(
-  id INTEGER PRIMARY KEY,           -- files.unique_id points here
-  sha256 TEXT,                      -- empty if the file was never checksummed (see checksum)
-  name TEXT,                        -- name of the representative (oldest) copy
-  other_names TEXT,                 -- other names the same content goes by, "; "-separated
-  ext TEXT, format TEXT, puid TEXT, format_version TEXT, mime TEXT,
-  mac_type TEXT, mac_creator TEXT,
-  size_bytes INTEGER, size TEXT,    -- size TEXT is human-readable, e.g. "1.2 MB"
-  created TEXT,                     -- earliest date created among the copies
-  modified TEXT,                    -- earliest date modified among the copies
-  modified_latest TEXT,
-  year INTEGER,                     -- year of `modified`
-  copies INTEGER,                   -- 1 = unique; N = N identical copies in the archive
-  drives INTEGER, volumes INTEGER,  -- how many source drives / archive drives they're on
-  archive TEXT, path TEXT, folder TEXT,   -- where the representative copy is
-  locations TEXT,                   -- every copy as "archive: path", "; "-separated (first 100)
-  drive_list TEXT,                  -- "archive: drive" for each drive holding a copy
-  checksum TEXT,                    -- checksummed | not yet checksummed | unreadable
-  category TEXT                     -- from classify_archive.py: TAP, Class, ... (if run)
-);
-"""
-
-
-def human(n):
-    n = float(n or 0)
-    for unit in ("bytes", "KB", "MB", "GB", "TB"):
-        if n < 1000 or unit == "TB":
-            return f"{int(n)} bytes" if unit == "bytes" else f"{n:.1f} {unit}"
-        n /= 1000
-
-
-def build_unique(db, max_locations=100):
-    """Rebuild unique_files from files, and point files.unique_id at it. Clutter
-    (.DS_Store, empty files, ...) is left out; those files get unique_id NULL."""
-    t0 = time.time()
-    db.executescript(UNIQUE_SCHEMA)
-    cur = db.execute("""SELECT id, COALESCE(sha256, 'f' || id) k, sha256, hash_error, archive, drive,
-                               path, name, ext, size, mtime, modified, created, format, puid,
-                               format_version, mime, mac_type, mac_creator
-                        FROM files WHERE junk=0 ORDER BY k""")
-    db.execute("UPDATE files SET unique_id=NULL")
-    uid, out, links = 0, [], []
-
-    def flush():
-        db.executemany("INSERT INTO unique_files VALUES (" + ",".join("?" * 27) + ")", out)
-        db.executemany("UPDATE files SET unique_id=? WHERE id=?", links)
-        out.clear()
-        links.clear()
-
-    def emit(group):
-        nonlocal uid
-        uid += 1
-        rep = min(group, key=lambda r: (r[10] or 0, len(r[6])))          # oldest copy
-        names = sorted({r[7] for r in group} - {rep[7]}, key=str.lower)
-        created = min((r[12] for r in group if r[12]), default="")
-        mods = sorted(r[11] for r in group if r[11])
-        locs = sorted(f"{r[4]}: {r[6]}" for r in group)
-        if len(locs) > max_locations:
-            locs = locs[:max_locations] + [f"... and {len(locs) - max_locations} more"]
-        drives = sorted({f"{r[4]}: {r[5]}" for r in group}, key=str.lower)
-        sha = rep[2]
-        status = "checksummed" if sha else "unreadable" if rep[3] else "not yet checksummed"
-        folder = os.path.dirname(rep[6])
-        out.append((uid, sha or "", rep[7], "; ".join(names), rep[8], rep[13] or "", rep[14] or "",
-                    rep[15] or "", rep[16] or "", rep[17] or "", rep[18] or "", rep[9], human(rep[9]),
-                    created, mods[0] if mods else "", mods[-1] if mods else "",
-                    int(mods[0][:4]) if mods else None, len(group), len(drives),
-                    len({r[4] for r in group}), rep[4], rep[6], f"{rep[4]}: {folder or '/'}",
-                    "; ".join(locs), "; ".join(drives), status, None))
-        links.extend((uid, r[0]) for r in group)
-        if len(out) >= 5000:
-            flush()
-
-    group, key = [], None
-    for r in cur:
-        if r[1] != key and group:
-            emit(group)
-            group = []
-        key = r[1]
-        group.append(r)
-    if group:
-        emit(group)
-    flush()
-    # subject category, if classify_archive.py has been run
-    have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if {"content_class", "file_class"} <= have:
-        db.execute("""UPDATE unique_files SET category = COALESCE(
-                        (SELECT c.category FROM content_class c WHERE c.sha256 = unique_files.sha256),
-                        (SELECT fc.category FROM file_class fc
-                          WHERE fc.archive = unique_files.archive AND fc.path = unique_files.path),
-                        'Unclassified')""")
-    db.executescript("""
-        CREATE INDEX IF NOT EXISTS i_u_category ON unique_files(category);
-        CREATE INDEX IF NOT EXISTS i_u_sha ON unique_files(sha256);
-        CREATE INDEX IF NOT EXISTS i_u_name ON unique_files(name COLLATE NOCASE);
-        CREATE INDEX IF NOT EXISTS i_u_copies ON unique_files(copies);
-        CREATE INDEX IF NOT EXISTS i_u_format ON unique_files(format);
-        CREATE INDEX IF NOT EXISTS i_u_year ON unique_files(year);""")
-    try:   # full-text index over the human-searchable columns (SQLite FTS5)
-        db.executescript("""
-            CREATE VIRTUAL TABLE unique_search USING fts5(
-              name, other_names, folder, locations, format, ext,
-              content='unique_files', content_rowid='id', tokenize='unicode61 remove_diacritics 2');
-            INSERT INTO unique_search(unique_search) VALUES('rebuild');""")
-        fts = "with full-text index unique_search"
-    except sqlite3.OperationalError as e:
-        fts = f"(no full-text index: {e})"
-    db.commit()
-    n_files = db.execute("SELECT COUNT(*) FROM files WHERE junk=0").fetchone()[0]
-    log(f"   unique_files: {uid:,} distinct files (from {n_files:,} non-clutter files) {fts}, "
-        f"{time.time() - t0:.0f}s")
-    return uid
-
-
 # ---------- 4. reports (all archive drives) ----------
 
 PENDING = "f.sha256 IS NULL AND f.hash_error IS NULL AND f.junk=0"     # not yet checksummed
@@ -775,18 +560,16 @@ def appledouble_orphans(db):
 # ---------- main ----------
 
 def prepare_for_search(outdir):
-    """Keep the search app fast: rebuild its helper tables (search_app/prepare_search.py, which
-    also runs ANALYZE), or at least refresh SQLite's statistics."""
-    helper = Path(__file__).resolve().parent / "prepare_search.py"
-    cat = Path(outdir) / "archive_catalog.sqlite"
+    """Keep the search app fast: rebuild its helper tables (jva.search_prep, as
+    prepare_search.py does), which also refreshes SQLite's statistics."""
     log("6. prepare for searching")
-    if helper.exists():
-        r = subprocess.run([sys.executable, str(helper), "--catalogue", str(cat)])
-        if r.returncode == 0:
-            return
-        log("   prepare_search.py failed; refreshing statistics only")
-    db = sqlite3.connect(cat)
-    db.execute("ANALYZE")
+    db = sqlite3.connect(Path(outdir) / "archive_catalog.sqlite", timeout=60)
+    try:
+        n = prepare(db, step=lambda m: log(f"   {m}"))
+        log(f"   {n:,} distinct files ready for searching")
+    except Exception as e:                     # never lose the run's results over this
+        log(f"   preparing for searching failed ({e}); refreshing statistics only")
+        db.execute("ANALYZE")
     db.close()
 
 
@@ -806,8 +589,8 @@ def main():
     if not a.reports:
         if not a.archive:
             ap.error('the archive volume is required, e.g.  -a "TAP 4T 2019"')
-        vol = Path(a.archive) if a.archive.startswith("/") else Path("/Volumes") / a.archive
-        if not os.path.ismount(vol):
+        vol = volumes.path_of(a.archive)
+        if not volumes.is_mounted(a.archive):
             sys.exit(f"{vol} is not mounted.")
         archive = vol.name
     db = open_catalogue(outdir)

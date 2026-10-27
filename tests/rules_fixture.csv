@@ -1,0 +1,12 @@
+pattern,category,strength,note
+# a fixed copy of the main kinds of rule, so the tests don't change when rules/classify_rules.csv does
+\btap\b,TAP,strong,
+\bnpw\b,TAP,strong,
+\bnml\b,TAP,strong,
+\bthai\b,TAP,broad,
+\bworld trip\b,Other,nottap,
+\b(china|chinese)\b,SE Asian Archaeology,nottap,
+\bant[ _-]?\d{3}[a-z]?\b,Class,strong,
+\bcourses?\b,Class,weak,
+\bdisplays?\b,Museum,strong,
+\bmuseum\b,Museum,weak,

@@ -44,19 +44,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva.catalog import CATEGORIES, CLASSIFICATION, log  # noqa: E402
+
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
-CATEGORIES = ["TAP", "Class", "SE Asian Archaeology", "Other Archaeology", "Museum", "Other",
-              "Unclassified"]
 RANK = {c: i for i, c in enumerate(CATEGORIES)}       # lower = wins when copies disagree
 STRENGTHS = ("override", "nottap", "strong", "broad", "weak")
 # folder names that are really a computer / drive / backup, not a subject: a TAP match in such
 # a name only counts as weak ("TAP Voelker mac laptop", "TAP - KEEP", "TAP from Museum wd")
 CONTAINER = re.compile(r"(?i)\b(desktop|laptop|computer|pc|i?mac|macbook|dell|wd|drive|jump ?drive|"
                        r"thumb ?drives?|backups?|backed up|back up|keep)\b")
-
-
-def log(*a):
-    print(*a, file=sys.stderr, flush=True)
 
 
 def load_rules(path):
@@ -183,12 +179,7 @@ def main():
     # everyone else (the search app) keeps seeing the old one, and a run that is stopped
     # half-way leaves the old one in place.
     db.execute("BEGIN")
-    for stmt in ("DROP TABLE IF EXISTS file_class",
-                 """CREATE TABLE file_class(archive TEXT, path TEXT, category TEXT, rule TEXT,
-                                            matched TEXT, PRIMARY KEY(archive, path))""",
-                 "DROP TABLE IF EXISTS content_class",
-                 """CREATE TABLE content_class(sha256 TEXT PRIMARY KEY, category TEXT,
-                                               copies_by_category TEXT)"""):
+    for stmt in CLASSIFICATION:
         db.execute(stmt)
     per_sha = defaultdict(Counter)
     review = defaultdict(lambda: [Counter(), Counter(), 0, 0])     # folder -> cats, rules, n, bytes

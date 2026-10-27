@@ -28,10 +28,8 @@ are not touched.
 """
 import argparse
 import csv
-import hashlib
 import os
 import sqlite3
-import struct
 import subprocess
 import sys
 import time
@@ -41,161 +39,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repositor
 from jva.config import CONFIG  # noqa: E402
 PROJECT_DIR = CONFIG.data_dir             # catalogue, reports and drive records
 SCRIPTS = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPTS))
-from check_tiffs import MAX_ENTRIES, POINTER_TAGS, TYPE_SIZE, check_tiff  # noqa: E402
+from jva.catalog import TIFF_REPAIRS  # noqa: E402
+from jva.tiff import apply_fixes, check_tiff, move_checksum, plan_fixes, sha256_file, undo_fixes  # noqa: E402
+from jva import volumes  # noqa: E402
 
 VOLUMES = CONFIG.volumes_root
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS tiff_repairs(
-  archive TEXT, path TEXT,
-  old_sha256 TEXT, new_sha256 TEXT,
-  offset INTEGER, old_bytes BLOB, new_bytes BLOB,   -- one directory rewritten (several rows if several)
-  removed TEXT,                                     -- e.g. "Exif pointer"
-  repaired_at TEXT);
-CREATE INDEX IF NOT EXISTS i_tr_path ON tiff_repairs(archive, path);
-"""
+SCHEMA = TIFF_REPAIRS
 
 
 def log(*a):
     print(*a, file=sys.stderr, flush=True)
-
-
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as fh:
-        for b in iter(lambda: fh.read(1 << 20), b""):
-            h.update(b)
-    return h.hexdigest()
-
-
-# ---------- finding the bad entries ----------
-
-def plan_fixes(path):
-    """-> [(offset, old_bytes, new_bytes, [what was removed])] -- the directories to rewrite."""
-    size = os.path.getsize(path)
-    with open(path, "rb") as fh:
-        def read(off, n):
-            if off < 0 or off + n > size:
-                return None
-            fh.seek(off)
-            b = fh.read(n)
-            return b if len(b) == n else None
-
-        head = read(0, 8)
-        if not head or head[:2] not in (b"II", b"MM"):
-            return []
-        e = "<" if head[:2] == b"II" else ">"
-        if struct.unpack(e + "H", head[2:4])[0] != 42:
-            return []
-
-        def directory(off):
-            """-> (entries [(tag, typ, cnt, value, raw12)], next, raw block) or None if not one"""
-            if not off or off >= size:
-                return None
-            nb = read(off, 2)
-            if nb is None:
-                return None
-            n = struct.unpack(e + "H", nb)[0]
-            if n == 0 or n > MAX_ENTRIES:
-                return None
-            raw = read(off, 2 + n * 12 + 4)
-            if raw is None:
-                return None
-            ents = []
-            for i in range(n):
-                r12 = raw[2 + i * 12: 14 + i * 12]
-                tag, typ, cnt, v = struct.unpack(e + "HHII", r12)
-                ents.append((tag, typ, cnt, v, r12))
-            return ents, raw[2 + n * 12:], raw
-
-        def targets(typ, cnt, v):
-            sz = TYPE_SIZE.get(typ, 1) * cnt
-            if typ not in (4, 13) or cnt == 0:
-                return [v] if cnt == 1 else None
-            data = struct.pack(e + "I", v) if sz <= 4 else read(v, sz)
-            return list(struct.unpack(e + "I" * cnt, data)) if data else None
-
-        def fix(off, ents, nxt, raw, pointer_tags):
-            keep, removed = [], []
-            for tag, typ, cnt, v, r12 in ents:
-                if tag in pointer_tags:
-                    ts = targets(typ, cnt, v)
-                    if ts is None or any(directory(t) is None for t in ts):
-                        removed.append(f"{pointer_tags[tag]} pointer")
-                        continue
-                keep.append(r12)
-            if not removed:
-                return None
-            new = struct.pack(e + "H", len(keep)) + b"".join(keep) + nxt
-            new += b"\0" * (len(raw) - len(new))
-            return off, raw, new, removed
-
-        fixes, off, seen = [], struct.unpack(e + "I", head[4:8])[0], set()
-        while off and off not in seen and len(seen) < 64:
-            seen.add(off)
-            d = directory(off)
-            if d is None:
-                break
-            ents, nxt, raw = d
-            f = fix(off, ents, nxt, raw, POINTER_TAGS)
-            if f:
-                fixes.append(f)
-            for tag, typ, cnt, v, _ in ents:                  # inside a sound Exif directory:
-                if tag == 34665 and not (f and "Exif pointer" in f[3]):   # its Interoperability pointer
-                    ex = directory(v)
-                    if ex:
-                        g = fix(v, ex[0], ex[1], ex[2], {40965: "Interoperability"})
-                        if g:
-                            fixes.append(g)
-            off = struct.unpack(e + "I", nxt[:4])[0]
-    return fixes
-
-
-def apply_fixes(path, fixes):
-    st = os.stat(path)
-    with open(path, "r+b") as fh:
-        for off, _old, new, _ in fixes:
-            fh.seek(off)
-            fh.write(new)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))      # keep the file's date
-
-
-def undo_fixes(path, fixes):
-    st = os.stat(path)
-    with open(path, "r+b") as fh:
-        for off, old, _new, _ in reversed(fixes):
-            fh.seek(off)
-            fh.write(old)
-    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
-
-
-# ---------- the catalogue ----------
-
-def has_table(db, t):
-    return db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone() is not None
-
-
-def move_checksum(db, old, new):
-    """Copies whose content changed from `old` to `new`: carry the preview images and the
-    category over to the new checksum (kept for the old one while copies with it remain)."""
-    still_old = db.execute("SELECT 1 FROM files WHERE sha256=? LIMIT 1", (old,)).fetchone() is not None
-    for table in ("derivatives", "content_class"):
-        if not has_table(db, table):
-            continue
-        if db.execute(f"SELECT 1 FROM {table} WHERE sha256=?", (new,)).fetchone():
-            continue
-        if still_old:
-            cols = [r[1] for r in db.execute(f"PRAGMA table_info({table})")]
-            sel = ", ".join("?" if c == "sha256" else c for c in cols)
-            db.execute(f"INSERT INTO {table} ({', '.join(cols)}) SELECT {sel} FROM {table} WHERE sha256=?",
-                       (new, old))
-        else:
-            db.execute(f"UPDATE {table} SET sha256=? WHERE sha256=?", (new, old))
-    if not still_old:
-        db.execute("UPDATE unique_files SET sha256=? WHERE sha256=?", (new, old))
-    return still_old
 
 
 # ---------- main ----------
@@ -211,8 +64,7 @@ def main():
     out = Path(a.out)
     db = sqlite3.connect(out / "archive_catalog.sqlite", timeout=60)
     db.executescript(SCHEMA)
-    mounted = lambda arch: os.path.isdir(os.path.join(a.volumes, arch)) and \
-        (a.volumes != VOLUMES or os.path.ismount(os.path.join(a.volumes, arch)))
+    mounted = lambda arch: volumes.is_mounted(arch, a.volumes)
 
     if a.undo:
         return undo_all(db, a, mounted)

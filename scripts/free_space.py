@@ -41,8 +41,6 @@ Don't run it while another script is using the same drive.
 """
 import argparse
 import csv
-import ctypes
-import ctypes.util
 import os
 import re
 import sqlite3
@@ -52,45 +50,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva import volumes  # noqa: E402
+from jva.catalog import REMOVED_COPIES, log  # noqa: E402
+from jva.macfiles import make_xattr_reader  # noqa: E402
+
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 CHUNK = 8 * 1024 * 1024
 
-REMOVED_SCHEMA = """
-CREATE TABLE IF NOT EXISTS removed_copies(
-  archive TEXT, path TEXT, sha256 TEXT, size INTEGER, modified TEXT, created TEXT,
-  drive TEXT, category TEXT, kept_path TEXT, removed_at TEXT, reason TEXT,
-  PRIMARY KEY(archive, path));
-"""
-
-
-def log(*a):
-    print(*a, file=sys.stderr, flush=True)
-
-
-def make_xattr_reader():
-    if sys.platform == "darwin":
-        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
-        fn = libc.getxattr
-        fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t,
-                       ctypes.c_uint32, ctypes.c_int]
-        fn.restype = ctypes.c_ssize_t
-
-        def get(path, name):
-            p, n = os.fsencode(path), name.encode()
-            size = fn(p, n, None, 0, 0, 1)
-            if size < 0:
-                return None
-            buf = ctypes.create_string_buffer(size)
-            got = fn(p, n, buf, size, 0, 1)
-            return buf.raw[:got] if got >= 0 else None
-        return get
-
-    def get(path, name):                     # Linux, for testing
-        try:
-            return os.getxattr(path, "user." + name, follow_symlinks=False)
-        except (OSError, AttributeError):
-            return None
-    return get
+REMOVED_SCHEMA = REMOVED_COPIES
 
 
 def same_bytes(a, b):
@@ -154,7 +121,7 @@ def main():
     ap.add_argument("-o", "--out", default=PROJECT_DIR, help=argparse.SUPPRESS)
     a = ap.parse_args()
 
-    vol = Path(a.archive) if a.archive.startswith("/") else Path("/Volumes") / a.archive
+    vol = volumes.path_of(a.archive)
     archive = vol.name
     outdir = Path(a.out).expanduser()
     db = sqlite3.connect(outdir / "archive_catalog.sqlite")
@@ -182,7 +149,7 @@ def main():
     done = skipped = freed = 0
     results = []
     if a.apply:
-        if not os.path.ismount(vol):
+        if not volumes.is_mounted(a.archive):
             sys.exit(f"{vol} is not mounted.")
         xattr = make_xattr_reader()
         free_before = os.statvfs(vol)

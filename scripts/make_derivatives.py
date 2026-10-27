@@ -75,17 +75,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva import volumes  # noqa: E402
+from jva.catalog import DERIVATIVES  # noqa: E402
+from jva.kinds import (DRAWING_EXT, DRAWING_MAC, IMAGE_EXT, IMAGE_MAC, OLD_DOC_MAC, PS_EXT,  # noqa: E402
+                       PS_MAC, WORD_MAC)
+
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 MARKER = ".archive-derivatives"          # identify_archive.py skips folders containing this
 THUMB_PX, PREVIEW_PX = 480, 1200
 THUMB_Q, PREVIEW_Q = 75, 80
 TIMEOUT = 300                             # seconds per tool call
 
-IMAGE_EXT = {".jpg", ".jpeg", ".jpe", ".tif", ".tiff", ".png", ".gif", ".bmp", ".psd", ".psb",
-             ".heic", ".heif", ".webp", ".jp2", ".j2k", ".pct", ".pict", ".pic", ".tga",
-             ".nef", ".cr2", ".cr3", ".crw", ".dng", ".orf", ".arw", ".raf", ".rw2", ".raw",
-             ".eps", ".ai", ".svg", ".ico", ".icns", ".xcf", ".pcx", ".sgi", ".exr"}
-IMAGE_MAC = {"JPEG", "TIFF", "PICT", "GIFf", "PNGf", "8BPS", "EPSF", "BMP ", "BMPf"}
 PDF_EXT = {".pdf"}
 # Quick Look can render these (first page / first frame)
 QL_EXT = {".doc", ".docx", ".dot", ".dotx", ".rtf", ".txt", ".text", ".md", ".csv", ".tsv",
@@ -94,28 +94,13 @@ QL_EXT = {".doc", ".docx", ".dot", ".dotx", ".rtf", ".txt", ".text", ".md", ".cs
           ".mov", ".mp4", ".m4v", ".avi", ".mpg", ".mpeg", ".3gp", ".mts", ".m2ts", ".wmv",
           ".mkv", ".dv", ".usdz", ".stl", ".obj", ".epub"}
 QL_MAC = {"TEXT", "WDBN", "W8BN", "W6BN", "XLS8", "XLS5", "SLD8", "PPT3", "MooV", "RTF "}
-# Deneba Canvas drawings, opened by LibreOffice (its libmwaw import filter). On the old
-# drives these mostly have no extension, or a meaningless one ("T_16560", "fig.1", ...),
-# so the Mac type code is what identifies them; the extensions are for later copies.
-DRAWING_MAC = {"drw2", "drw3", "drw5", "drwt"}
-DRAWING_EXT = {".cvs", ".cv5", ".cv6", ".cv7", ".cv8", ".cv9", ".cvx", ".canvas", ".can"}
-# Old Mac word-processor, spreadsheet and presentation files, by Mac type code: Word 4/5
-# (WDBN), Word 6 (W6BN), Word 98 (W8BN), MacWrite (MACA "WORD", MWII), ClarisWorks/AppleWorks
-# (CWWP/CWSS/CWDB/CWGR), WriteNow (nX^d), old Excel and PowerPoint. LibreOffice reads them
-# (its libmwaw and MS Office filters); Quick Look mostly can't, and qlmanage then hangs.
-OLD_DOC_MAC = {"WDBN", "W6BN", "W8BN", "WORD", "MWII", "MW2D", "CWWP", "CWSS", "CWDB", "CWGR",
-               "nX^d", "XLS3", "XLS4", "XLS5", "XLS8", "XLBN", "SLD3", "SLD8", "PPT3"}
+# Canvas drawings (DRAWING_*) are opened by LibreOffice (its libmwaw import filter); so are
+# old Mac documents (OLD_DOC_MAC), which Quick Look mostly can't read -- qlmanage then hangs.
 # document extensions LibreOffice can try when Quick Look fails
 LO_DOC_EXT = {".doc", ".docx", ".dot", ".rtf", ".xls", ".xlsx", ".ppt", ".pptx", ".pps", ".odt",
               ".ods", ".odp", ".wpd", ".wps", ".mcw", ".wri", ".sxw", ".txt", ".text"}
-# old Microsoft Word for Mac: Word 1-3 (WORD/MSWD), 4-5 (WDBN), 6 (W6BN), 98 (W8BN)
-WORD_MAC = {"WDBN", "W6BN", "W8BN"}
 QL_TIMEOUT = 45     # seconds; Quick Look either renders a file quickly or hangs on it
-# Adobe Illustrator and other PostScript. On the old Macs, Illustrator 5-8 saved plain
-# PostScript with Mac type TEXT and creator ART3/ART5/ARTZ..., often with no extension;
-# the first bytes of the file decide how it is drawn (see sniff()).
-PS_EXT = {".ai", ".eps", ".epsf", ".epsi", ".ps"}
-PS_MAC = {"EPSF", "EPSP", "EPSI"}
+# Illustrator/PostScript (PS_*): the first bytes of the file decide how it is drawn (sniff()).
 
 PLACEHOLDER_KIND = [
     ("drawing", DRAWING_EXT),
@@ -133,22 +118,7 @@ PLACEHOLDER_KIND = [
     ("image", IMAGE_EXT),
 ]
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS derivatives(
-  sha256 TEXT PRIMARY KEY,      -- same key as files.sha256 / unique_files.sha256
-  slug TEXT,                    -- web-safe name, e.g. anvils-2-for-jake-3f9a2c7b1e
-  kind TEXT,                    -- image | pdf | postscript | drawing | olddoc | quicklook | placeholder
-  method TEXT,                  -- imagemagick | sips | libreoffice | ghostscript | quicklook | placeholder
-  status TEXT,                  -- made | placeholder | failed
-  root TEXT,                    -- the derivatives folder (absolute path) when made
-  thumb TEXT,                   -- path relative to root, e.g. thumb/3f/<slug>.webp
-  preview TEXT,                 -- path relative to root
-  width INTEGER, height INTEGER,-- of the preview
-  pdf TEXT, rtf TEXT,           -- old Word files: whole document as PDF and RTF (relative paths)
-  source_archive TEXT, source_path TEXT,   -- the copy it was made from
-  error TEXT, made_at TEXT);
-CREATE INDEX IF NOT EXISTS i_der_status ON derivatives(status);
-"""
+SCHEMA = DERIVATIVES
 
 
 def log(*a):
@@ -593,8 +563,8 @@ def main():
     ap.add_argument("-o", "--out", default=PROJECT_DIR, help=argparse.SUPPRESS)
     a = ap.parse_args()
 
-    vol = Path(a.archive) if a.archive.startswith("/") else Path("/Volumes") / a.archive
-    if not os.path.ismount(vol):
+    vol = volumes.path_of(a.archive)
+    if not volumes.is_mounted(a.archive):
         sys.exit(f"{vol} is not mounted.")
     archive = vol.name
     dest = Path(a.dest).expanduser().resolve()

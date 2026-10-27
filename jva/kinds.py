@@ -1,30 +1,46 @@
-"""kinds.py -- the broad kind of a file (Image, PDF, Document, Video, Audio, Other), worked out from
-its extension, MIME type and classic Mac type code; and the Site and Season a file belongs
-to, from its paths. Shared by archive_search.py and prepare_search.py."""
+"""What sort of file something is, from its extension, MIME type and classic Mac type and
+creator codes; and the Site and Season a file belongs to, from its paths.
+
+The format lists here are the only ones: the search app's Kind (kind_of), the search tables
+(prepare_search.py) and the preview images (make_derivatives.py) all use them."""
 import re
 
 
 KINDS = ["Image", "PDF", "Document", "Video", "Audio", "Other"]
 
 IMAGE_EXT = {".jpg", ".jpeg", ".jpe", ".tif", ".tiff", ".png", ".gif", ".bmp", ".psd", ".psb",
-             ".heic", ".heif", ".webp", ".jp2", ".pct", ".pict", ".pic", ".tga", ".nef", ".cr2",
-             ".cr3", ".crw", ".dng", ".orf", ".arw", ".raf", ".rw2", ".raw", ".eps", ".ai", ".svg",
-             ".ico", ".icns"}
+             ".heic", ".heif", ".webp", ".jp2", ".j2k", ".pct", ".pict", ".pic", ".tga",
+             ".nef", ".cr2", ".cr3", ".crw", ".dng", ".orf", ".arw", ".raf", ".rw2", ".raw",
+             ".eps", ".ai", ".svg", ".ico", ".icns", ".xcf", ".pcx", ".sgi", ".exr"}
 DOC_EXT = {".doc", ".docx", ".dot", ".rtf", ".txt", ".text", ".md", ".pages", ".odt", ".wpd",
            ".wps", ".xls", ".xlsx", ".csv", ".tsv", ".numbers", ".ods", ".ppt", ".pptx", ".pps",
            ".key", ".odp", ".html", ".htm", ".xml", ".eml", ".tex", ".fp5", ".fp7", ".fmp12"}
 VIDEO_EXT = {".mov", ".mp4", ".m4v", ".avi", ".mpg", ".mpeg", ".3gp", ".mts", ".m2ts", ".wmv",
              ".mkv", ".dv", ".vob", ".flv"}
-AUDIO_EXT = {".mp3", ".m4a", ".aif", ".aiff", ".wav", ".flac", ".ogg", ".wma", ".aac", ".mid"}
-IMAGE_MAC = {"JPEG", "TIFF", "PICT", "GIFf", "PNGf", "8BPS", "EPSF", "EPSP", "EPSI"}
+AUDIO_EXT = {".mp3", ".m4a", ".aif", ".aiff", ".wav", ".flac", ".ogg", ".wma", ".aac", ".mid", ".midi"}
+IMAGE_MAC = {"JPEG", "TIFF", "PICT", "GIFf", "PNGf", "8BPS", "EPSF", "EPSP", "EPSI", "BMP ", "BMPf"}
 DOC_MAC = {"TEXT", "WDBN", "W8BN", "W6BN", "XLS8", "XLS5", "SLD8", "PPT3", "RTF "}
+
+# Adobe Illustrator and other PostScript. On the old Macs, Illustrator 5-8 saved plain
+# PostScript with Mac type TEXT and creator ART3/ART5/ARTZ..., often with no extension.
+PS_EXT = {".ai", ".eps", ".epsf", ".epsi", ".ps"}
+PS_MAC = {"EPSF", "EPSP", "EPSI"}
+# Deneba Canvas drawings. On the old drives these mostly have no extension, or a meaningless
+# one ("T_16560", "fig.1", ...), so the Mac type code is what identifies them.
+DRAWING_MAC = {"drw2", "drw3", "drw5", "drwt"}
+DRAWING_EXT = {".cvs", ".cv5", ".cv6", ".cv7", ".cv8", ".cv9", ".cvx", ".canvas", ".can"}
+# Old Mac word-processor, spreadsheet and presentation files, by Mac type code: Word 4/5
+# (WDBN), Word 6 (W6BN), Word 98 (W8BN), MacWrite (MACA "WORD", MWII), ClarisWorks/AppleWorks
+# (CWWP/CWSS/CWDB/CWGR), WriteNow (nX^d), old Excel and PowerPoint.
+OLD_DOC_MAC = {"WDBN", "W6BN", "W8BN", "WORD", "MWII", "MW2D", "CWWP", "CWSS", "CWDB", "CWGR",
+               "nX^d", "XLS3", "XLS4", "XLS5", "XLS8", "XLBN", "SLD3", "SLD8", "PPT3"}
+# old Microsoft Word for Mac: Word 4-5 (WDBN), 6 (W6BN), 98 (W8BN); Word 1-3 is WORD/MSWD
+WORD_MAC = {"WDBN", "W6BN", "W8BN"}
 
 
 # Bump this whenever kind_of() changes: the search app then ignores the kinds stored by
 # prepare_search.py until it is run again.
-RULES_VERSION = 3
-
-PS_EXT = {".ai", ".eps", ".epsf", ".epsi", ".ps"}
+RULES_VERSION = 4
 
 
 def kind_of(ext, mime, mac_type, creator=""):

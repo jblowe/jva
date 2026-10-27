@@ -22,132 +22,16 @@ import argparse
 import csv
 import os
 import sqlite3
-import struct
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva.tiff import check_tiff  # noqa: E402
+from jva import volumes  # noqa: E402
 PROJECT_DIR = CONFIG.data_dir             # catalogue, reports and drive records
 VOLUMES = CONFIG.volumes_root
-TYPE_SIZE = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4, 16: 8, 17: 8, 18: 8}
-POINTER_TAGS = {34665: "Exif", 34853: "GPS", 40965: "Interoperability", 330: "SubIFD"}
-MAX_ENTRIES = 1000            # more entries than this in one directory means it isn't one
-
-
-class Bad(Exception):
-    pass
-
-
-def check_tiff(path):
-    """-> list of problems (strings); [] if the structure is sound."""
-    problems = []
-    size = os.path.getsize(path)
-    with open(path, "rb") as fh:
-        def read(off, n):
-            if off < 0 or off + n > size:
-                raise Bad(f"needs bytes {off:,}-{off + n:,} but the file is {size:,} bytes")
-            fh.seek(off)
-            b = fh.read(n)
-            if len(b) < n:
-                raise Bad("file ends early (read error)")
-            return b
-
-        head = read(0, 8) if size >= 8 else b""
-        if head[:2] == b"II":
-            e = "<"
-        elif head[:2] == b"MM":
-            e = ">"
-        else:
-            return ["not a TIFF (no II/MM byte-order mark)"]
-        magic = struct.unpack(e + "H", head[2:4])[0]
-        if magic == 43:
-            return []                                    # BigTIFF: not checked (rare here)
-        if magic != 42:
-            return [f"bad TIFF signature ({magic})"]
-
-        def ifd(off, what):
-            """-> {tag: (type, count, value_or_offset, inline_bytes)}"""
-            if off == 0 or off >= size:
-                raise Bad(f"{what} directory offset {off:,} is outside the file ({size:,} bytes)")
-            n = struct.unpack(e + "H", read(off, 2))[0]
-            if n == 0 or n > MAX_ENTRIES:
-                raise Bad(f"{what} directory at {off:,} has {n:,} entries: it is not a directory")
-            raw = read(off + 2, n * 12 + 4)
-            tags = {}
-            for i in range(n):
-                tag, typ, cnt = struct.unpack_from(e + "HHI", raw, i * 12)
-                inline = raw[i * 12 + 8:i * 12 + 12]
-                tags[tag] = (typ, cnt, struct.unpack(e + "I", inline)[0], inline)
-            nxt = struct.unpack_from(e + "I", raw, n * 12)[0]
-            return tags, nxt
-
-        def values(tags, tag):
-            typ, cnt, v, inline = tags[tag]
-            sz = TYPE_SIZE.get(typ, 1)
-            if typ not in (3, 4, 16):
-                return []
-            data = inline if sz * cnt <= 4 else read(v, sz * cnt)
-            f = {3: "H", 4: "I", 16: "Q"}[typ]
-            return list(struct.unpack(e + f * cnt, data[:sz * cnt]))
-
-        data_ranges = []
-        images, off, seen = 0, struct.unpack(e + "I", head[4:8])[0], set()
-        pointers = []
-        while off and images < 64:
-            if off in seen:
-                problems.append("the directories loop back on themselves")
-                break
-            seen.add(off)
-            try:
-                tags, nxt = ifd(off, "image" if images == 0 else f"image {images + 1}")
-            except Bad as x:
-                problems.append(str(x))
-                break
-            images += 1
-            for tag, (typ, cnt, v, _) in tags.items():          # out-of-line values inside the file
-                n = TYPE_SIZE.get(typ, 1) * cnt
-                if n > 4 and v + n > size:
-                    problems.append(f"tag {tag} data ({n:,} bytes at {v:,}) runs past the end of the file")
-            for o_tag, c_tag, what in ((273, 279, "strip"), (324, 325, "tile")):
-                if o_tag in tags:
-                    try:
-                        offs, counts = values(tags, o_tag), values(tags, c_tag) if c_tag in tags else []
-                    except Bad as x:
-                        problems.append(f"{what} table unreadable: {x}")
-                        continue
-                    if len(counts) != len(offs):
-                        problems.append(f"{len(offs):,} {what} offsets but {len(counts):,} {what} sizes")
-                    past = sum(1 for o, c in zip(offs, counts) if o + c > size)
-                    if past:
-                        problems.append(f"{past:,} of {len(offs):,} {what}s lie past the end of the file "
-                                        f"(the file is cut short)")
-                    if offs and counts:
-                        data_ranges.append((min(offs), max(o + c for o, c in zip(offs, counts))))
-            if 273 not in tags and 324 not in tags and images == 1:
-                problems.append("the first image has no image data (no strips or tiles)")
-            for tag, what in POINTER_TAGS.items():
-                if tag in tags:
-                    try:
-                        for p in values(tags, tag):
-                            pointers.append((what, p))
-                    except Bad as x:
-                        problems.append(f"{what} pointer unreadable: {x}")
-            off = nxt
-
-        def inside_data(p):
-            return any(lo <= p < hi for lo, hi in data_ranges)
-
-        for what, p in pointers:
-            where = " (it points into the image data)" if inside_data(p) else ""
-            try:
-                tags, _ = ifd(p, what)
-                if what == "Exif" and 40965 in tags:
-                    pointers.append(("Interoperability", tags[40965][2]))
-            except Bad as x:
-                problems.append(f"bad {what} pointer: {x}{where}")
-    return problems
 
 
 def main():
@@ -163,8 +47,7 @@ def main():
 
     out = Path(a.out)
     db = sqlite3.connect(f"file:{out / 'archive_catalog.sqlite'}?mode=ro", uri=True)
-    mounted = {r[0] for r in db.execute("SELECT name FROM archives")
-               if os.path.ismount(os.path.join(VOLUMES, r[0]))}
+    mounted = {r[0] for r in db.execute("SELECT name FROM archives") if volumes.is_mounted(r[0])}
     if a.archive:
         mounted &= {a.archive}
     if not mounted:

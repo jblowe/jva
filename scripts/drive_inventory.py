@@ -66,6 +66,8 @@ from pathlib import Path
 LEGACY_ARCHIVE = ("TAP 4T 2019", "CumulativeArchive")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva.catalog import connect, has_table  # noqa: E402
+
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 
 SKIP_DIRS = {".Spotlight-V100", ".fseventsd", ".Trashes", ".DocumentRevisions-V100",
@@ -526,9 +528,9 @@ def removed_copies(outdir, archive):
         return set()
     out = set()
     try:
-        with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as db:
+        with connect(p, readonly=True) as db:
             for table in ("removed_copies", "deleted_files"):
-                if db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone():
+                if has_table(db, table):
                     out |= {r[0] for r in db.execute(f"SELECT path FROM {table} WHERE archive=?", (archive,))}
     except sqlite3.Error:
         pass
