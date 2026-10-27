@@ -64,9 +64,24 @@ class Public(unittest.TestCase):
     def setUpClass(cls):
         cls.root, cls.config = H.make_archive(app={"mode": "public", "derivatives_url": "/derivatives/"})
         H.run_script("prepare_search", config=cls.config)
+        cls.db = H.connect(cls.config)
+        sha = cls.db.execute("SELECT sha256 FROM unique_files WHERE name='Burial 2.jpg'").fetchone()[0]
+        cls.db.executescript(__import__("jva.catalog", fromlist=["x"]).DERIVATIVES)
+        cls.db.execute("INSERT INTO derivatives(sha256, slug, kind, status, root, thumb, preview) "
+                       "VALUES (?, 'burial-2', 'image', 'made', '/nowhere', ?, ?)",
+                       (sha, f"thumb/{sha[:2]}/burial 2.webp", f"preview/{sha[:2]}/burial 2.webp"))
+        cls.db.commit()
         cls.A = load_app(cls.config)
         cls.c = cls.A.app.test_client()
-        cls.db = H.connect(cls.config)
+
+    def test_direct_image_links(self):
+        sha = self.db.execute("SELECT sha256 FROM unique_files WHERE name='Burial 2.jpg'").fetchone()[0]
+        t = self.c.get("/search").get_data(as_text=True)
+        self.assertIn(f'src="/derivatives/thumb/{sha[:2]}/burial%202.webp"', t)
+        self.assertIn("/static/placeholder/", t)            # files without previews
+        self.assertNotIn("/img/", t)
+        t = self.c.get(f"/file/{sha}").get_data(as_text=True)
+        self.assertIn(f"/derivatives/preview/{sha[:2]}/burial%202.webp", t)
 
     def test_pages(self):
         k = self.db.execute("SELECT sha256 FROM unique_files WHERE name='Burial 2.jpg'").fetchone()[0]
@@ -79,8 +94,9 @@ class Public(unittest.TestCase):
     def test_local_routes_gone(self):
         k = self.db.execute("SELECT sha256 FROM unique_files WHERE name='notes.txt'").fetchone()[0]
         self.assertEqual(self.c.get(f"/original/{k}").status_code, 404)
-        self.assertIn(self.c.post("/delete", data={"uid": 1}).status_code, (403, 404, 405))
-        self.assertIn(self.c.post("/reveal", data={"id": 1}).status_code, (403, 404, 405))
+        self.assertEqual(self.c.post("/delete", data={"uid": 1}).status_code, 404)
+        self.assertEqual(self.c.post("/reveal", data={"id": 1}).status_code, 404)
+        self.assertEqual(H.connect(self.config).execute("SELECT COUNT(*) FROM files").fetchone()[0], 12)
 
 
 if __name__ == "__main__":

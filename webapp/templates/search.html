@@ -59,7 +59,7 @@
       <tbody>
       {% for r in rows %}{% set key = r.sha256 or ('u' ~ r.id) %}
         <tr>
-          <td class="tiny"><img loading="lazy" src="{{ url_for('image', size='thumb', key=key) }}" alt=""></td>
+          <td class="tiny"><img loading="lazy" src="{{ img_src(r) }}" alt=""></td>
           <td><a href="{{ url_for('file_page', key=key) }}">{{ r.name }}</a>{% if r.other_names %}<div class="aka">also {{ r.other_names }}</div>{% endif %}</td>
           <td>{{ r.sites }}</td>
           <td>{{ r.seasons }}</td>

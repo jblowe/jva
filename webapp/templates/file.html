@@ -5,8 +5,8 @@
 {% set key = u.sha256 or ('u' ~ u.id) %}
 <article class="record">
   <div class="viewer">
-    <a href="{{ url_for('image', size='preview', key=key) }}" target="_blank" rel="noopener">
-      <img src="{{ url_for('image', size='preview', key=key) }}" alt="Preview of {{ u.name }}">
+    <a href="{{ img_src(u, 'preview') }}" target="_blank" rel="noopener">
+      <img src="{{ img_src(u, 'preview') }}" alt="Preview of {{ u.name }}">
     </a>
     {% if deriv and deriv.status != 'made' %}<p class="note">No preview image: {{ deriv.status }}{% if deriv.error %} ({{ deriv.error[:140] }}){% endif %}.</p>
     {% elif not deriv %}<p class="note">No preview made yet.</p>{% endif %}

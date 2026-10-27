@@ -12,7 +12,10 @@ config.example.json and docs/search-app.md); the catalogue is the one named ther
                      folder moves, list its new location here. The location each image was
                      made in is always tried last.
   mode               "local": Reveal in Finder, drive status, originals, Delete (this Mac only)
-                     "public": none of those -- for the web server
+                     "public": none of those (the routes don't exist) -- for the web server
+  derivatives_url    e.g. "/derivatives": pages link the preview images straight to this URL,
+                     where the web server (Apache) serves the derivatives folder itself, instead
+                     of through /img/ in the app
   hide_categories    categories never shown, e.g. ["Other", "Class"]
   host, port         default 127.0.0.1 and 5000 (local only)
   title              shown in the page header
@@ -29,7 +32,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from flask import Flask, abort, g, jsonify, render_template, request, send_file
+from urllib.parse import quote
+
+from flask import Flask, abort, g, jsonify, render_template, request, send_file, url_for
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -45,6 +50,7 @@ def load_config():
 
 
 CFG = load_config()
+LOCAL = CFG["mode"] == "local"
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
@@ -408,7 +414,6 @@ def file_page(key):
                            kind=kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"]))
 
 
-@app.route("/reveal", methods=["POST"])
 def reveal():
     """Show a copy in the Finder (local mode only, catalogued files on mounted drives only)."""
     if CFG["mode"] != "local" or sys.platform != "darwin":
@@ -428,13 +433,12 @@ def reveal():
 
 def allows_delete():
     s = CFG.get("allow_delete")
-    return CFG["mode"] == "local" and (s is None or bool(s))
+    return LOCAL and (s is None or bool(s))
 
 
 app.jinja_env.globals["allows_delete"] = allows_delete()
 
 
-@app.route("/delete", methods=["POST"])
 def delete():
     """Delete one copy (id = files.id) or every copy of a distinct file (uid = unique_files.id)
     from the archive drives, with their "._" companions, and update the catalogue. Uses
@@ -506,7 +510,7 @@ INLINE_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/gif", "imag
 
 def serves_originals():
     s = CFG.get("serve_originals")
-    return CFG["mode"] == "local" if s is None else bool(s)
+    return LOCAL and (s is None or bool(s))
 
 
 def original_copy(u):
@@ -532,7 +536,6 @@ def original_type(u):
 app.jinja_env.globals["serves_originals"] = serves_originals()
 
 
-@app.route("/original/<key>")
 def original(key):
     """The original file itself, from whichever plugged-in archive drive has a copy.
     ?download=1 always downloads; otherwise PDFs, pictures, plain text and common audio/video
@@ -573,6 +576,51 @@ def document(fmt, key):
             return send_file(p, mimetype="application/pdf" if fmt == "pdf" else "application/rtf",
                              as_attachment=(fmt == "rtf"), download_name=f"{stem}.{fmt}", max_age=86400)
     abort(404, "The drive with the derivatives folder isn't plugged in.")
+
+
+# the routes that reach the archive drives exist only on the Mac that has them
+if LOCAL:
+    app.add_url_rule("/reveal", view_func=reveal, methods=["POST"])
+    app.add_url_rule("/delete", view_func=delete, methods=["POST"])
+    app.add_url_rule("/original/<key>", view_func=original)
+
+
+def _field(r, k):
+    try:
+        return r[k]
+    except (KeyError, IndexError):
+        return None
+
+
+def img_src(r, size="thumb"):
+    """The URL of a file's thumbnail or preview. With derivatives_url set, straight to the image
+    file under it (served by the web server); otherwise through /img/ in the app."""
+    key = file_key(r)
+    base = CFG.get("derivatives_url")
+    if not base:
+        return url_for("image", size=size, key=key)
+    cache = g.setdefault("_deriv", {})
+    sha = _field(r, "sha256")
+    if sha and sha not in cache and has_table("derivatives"):
+        cache[sha] = db().execute("SELECT status, thumb, preview FROM derivatives WHERE sha256=?",
+                                  (sha,)).fetchone()
+    d = cache.get(sha) if sha else None
+    placeholder = None
+    if d is not None and d[size]:
+        if d["status"] == "made":
+            return base.rstrip("/") + "/" + quote(d[size])
+        if d[size].startswith("placeholder/"):
+            placeholder = Path(d[size]).stem
+    if placeholder is None:
+        kind = _field(r, "kind") or kind_of(_field(r, "ext"), _field(r, "mime"), _field(r, "mac_type"),
+                                            _field(r, "mac_creator"))
+        placeholder = PLACEHOLDER_FOR_KIND.get(kind, "unknown")
+    if not (HERE / "static" / "placeholder" / f"{placeholder}.svg").exists():
+        placeholder = "unknown"
+    return url_for("static", filename=f"placeholder/{placeholder}.svg")
+
+
+app.jinja_env.globals["img_src"] = img_src
 
 
 # ---------- browse by folder ----------
@@ -695,6 +743,6 @@ if CFG["warm_cache"] and os.path.exists(CFG["catalogue"]) and "JVA_NO_WARM" not 
 if __name__ == "__main__":
     print(f"Catalogue: {CFG['catalogue']}")
     if not is_prepared():
-        print("Tip: run  python3 prepare_search.py  once to make searching faster.")
+        print("Tip: run  python3 scripts/prepare_search.py  once to make searching faster.")
     print(f"Open http://{CFG['host']}:{CFG['port']}/   (Ctrl-C to stop)")
     app.run(host=CFG["host"], port=CFG["port"], debug=False, threaded=True)

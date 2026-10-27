@@ -2,7 +2,7 @@
 {# one result, drawn as a 35 mm slide mount #}
 {% set key = r.sha256 or ('u' ~ r.id) %}
 <a class="mount" href="{{ url_for('file_page', key=key) }}">
-  <span class="window"><img loading="lazy" src="{{ url_for('image', size='thumb', key=key) }}" alt=""></span>
+  <span class="window"><img loading="lazy" src="{{ img_src(r) }}" alt=""></span>
   <span class="caption">
     <span class="name" title="{{ r.name }}">{{ r.name }}</span>
     <span class="facts">
