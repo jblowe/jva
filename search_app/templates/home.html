@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="overview">
+  <h1>{{ "{:,}".format(total[0] or 0) }} distinct files, {{ total[1]|human }}</h1>
+  <p class="lede">Gathered from {{ vols|length }} archive drive{{ "" if vols|length == 1 else "s" }}, counting {{ "{:,}".format(total[2] or 0) }} copies in all. Search above, or start from a category or a folder.</p>
+
+  <h2>By category</h2>
+  <ul class="cats">
+    {% for c in cats %}
+    <li><a href="{{ url_for('search', cat=c.c) }}"><span class="cat cat-{{ c.c|replace(' ', '-')|lower }}">{{ c.c }}</span></a>
+      <span class="n">{{ "{:,}".format(c.n) }}</span> <span class="muted">{{ c.b|human }}</span></li>
+    {% endfor %}
+  </ul>
+
+  <h2>Archive drives</h2>
+  <table class="list">
+    <thead><tr><th>Drive</th><th class="r">Files</th><th class="r">Size</th><th>Last catalogued</th>{% if CFG.mode == 'local' %}<th>Status</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for v in vols %}
+      <tr><td><a href="{{ url_for('browse', a=v.name) }}">{{ v.name }}</a></td><td class="r">{{ "{:,}".format(v.files or 0) }}</td>
+        <td class="r">{{ v.bytes|human }}</td><td>{{ v.last_scan }}</td>
+        {% if CFG.mode == 'local' %}<td>{{ "Plugged in" if v.mounted else "Not plugged in" }}</td>{% endif %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if deriv %}
+  <h2>Preview images</h2>
+  <p>{% for s, n in deriv %}{{ "{:,}".format(n) }} {{ s }}{{ ", " if not loop.last else "" }}{% endfor %} — of {{ "{:,}".format(total[0] or 0) }} distinct files.</p>
+  {% endif %}
+  {% if not prepared %}<p class="muted">Searching would be faster: run <code>python3 prepare_search.py</code> in the search_app folder.</p>{% endif %}
+  {% if removed and removed[0] %}<p class="muted">{{ "{:,}".format(removed[0]) }} extra copies removed to save space ({{ removed[1]|human }}).</p>{% endif %}
+</section>
+{% endblock %}

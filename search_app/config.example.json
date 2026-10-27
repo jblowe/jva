@@ -1,0 +1,11 @@
+{
+  "catalogue": "../archive_catalog.sqlite",
+  "derivatives_roots": ["/Volumes/TAP PROJECT/_derivatives"],
+  "mode": "local",
+  "hide_categories": [],
+  "volumes_root": "/Volumes",
+  "host": "127.0.0.1",
+  "port": 5000,
+  "title": "Voelker Archive",
+  "page_size": 60
+}

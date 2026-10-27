@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ CFG.title }}{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="{{ url_for('home') }}">{{ CFG.title }}</a>
+  <form class="searchbar" action="{{ url_for('search') }}" method="get" role="search">
+    <label for="q" class="visually-hidden">Search the archive</label>
+    <input id="q" name="q" type="search" value="{{ q|default('') }}"
+           placeholder="Search names, folders, formats — e.g. anvil lopburi" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
+  <nav class="mainnav">
+    <a href="{{ url_for('search') }}">All files</a>
+    <a href="{{ url_for('browse') }}">Folders</a>
+    <a href="{{ url_for('home') }}">Overview</a>
+  </nav>
+</header>
+<main>
+{% block body %}{% endblock %}
+</main>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

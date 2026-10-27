@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_macros.html" import mount %}
+{% block title %}{{ prefix or archive or "Folders" }} – {{ CFG.title }}{% endblock %}
+{% block body %}
+<nav class="crumbs" aria-label="Folder path">
+  <a href="{{ url_for('browse') }}">Archive drives</a>
+  {% if archive %}<span>/</span><a href="{{ url_for('browse', a=archive) }}">{{ archive }}</a>{% endif %}
+  {% for name, p in crumbs %}<span>/</span>{% if loop.last %}<strong>{{ name }}</strong>{% else %}<a href="{{ url_for('browse', a=archive, p=p) }}">{{ name }}</a>{% endif %}{% endfor %}
+</nav>
+
+{% if not archive %}
+<ul class="folders">
+  {% for v in vols %}
+  <li><a href="{{ url_for('browse', a=v.archive) }}">{{ v.archive }}</a>
+    <span class="muted">{{ "{:,}".format(v.n) }} files, {{ v.b|human }}{% if CFG.mode == 'local' %} — {{ "plugged in" if mounted[v.archive] else "not plugged in" }}{% endif %}</span></li>
+  {% endfor %}
+</ul>
+{% else %}
+  {% if subs %}
+  <table class="list folders-table">
+    <thead><tr><th>Folder</th><th class="r">Files</th><th class="r">Size</th><th>Categories</th></tr></thead>
+    <tbody>
+    {% for name, n, b, cats in subs %}
+      <tr>
+        <td><a href="{{ url_for('browse', a=archive, p=(prefix ~ '/' ~ name) if prefix else name) }}">{{ name }}</a></td>
+        <td class="r">{{ "{:,}".format(n) }}</td>
+        <td class="r">{{ b|human }}</td>
+        <td><span class="mix">{% for c, k in cats %}<span class="seg cat-{{ c|replace(' ', '-')|lower }}" style="flex-grow: {{ k }}" title="{{ c }}: {{ '{:,}'.format(k) }}"></span>{% endfor %}</span>
+          <span class="muted small">{{ cats[0][0] }}{% if cats|length > 1 %} and {{ cats|length - 1 }} more{% endif %}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if files %}
+  <h2>Files in this folder</h2>
+  <div class="lightbox">
+    {% for f in files %}{% if f.id %}{{ mount(f) }}{% endif %}{% endfor %}
+  </div>
+  {% if more %}<p class="muted">… and {{ "{:,}".format(more) }} more. Use search to narrow them down.</p>{% endif %}
+  {% elif not subs %}<p>This folder is empty in the catalogue.</p>{% endif %}
+{% endif %}
+{% endblock %}

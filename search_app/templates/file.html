@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_macros.html" import mount %}
+{% block title %}{{ u.name }} – {{ CFG.title }}{% endblock %}
+{% block body %}
+{% set key = u.sha256 or ('u' ~ u.id) %}
+<article class="record">
+  <div class="viewer">
+    <a href="{{ url_for('image', size='preview', key=key) }}" target="_blank" rel="noopener">
+      <img src="{{ url_for('image', size='preview', key=key) }}" alt="Preview of {{ u.name }}">
+    </a>
+    {% if deriv and deriv.status != 'made' %}<p class="note">No preview image: {{ deriv.status }}{% if deriv.error %} ({{ deriv.error[:140] }}){% endif %}.</p>
+    {% elif not deriv %}<p class="note">No preview made yet.</p>{% endif %}
+    {% if orig %}<p class="note">Original file:
+      {% if orig.inline %}<a class="docdl" href="{{ url_for('original', key=key) }}" target="_blank" rel="noopener">Open</a>{% endif %}
+      <a class="docdl" href="{{ url_for('original', key=key, download=1) }}">Download</a></p>
+    {% elif serves_originals and copies %}<p class="note">To open the original, plug in “{{ copies[0].archive }}”.</p>{% endif %}
+    {% if deriv and (deriv.pdf or deriv.rtf) %}<p class="note">Whole document:
+      {% if deriv.pdf %}<a class="docdl" href="{{ url_for('document', fmt='pdf', key=key) }}" target="_blank" rel="noopener">Open PDF</a>{% endif %}
+      {% if deriv.rtf %}<a class="docdl" href="{{ url_for('document', fmt='rtf', key=key) }}">Download RTF</a>{% endif %}</p>{% endif %}
+  </div>
+
+  <div class="facts-panel">
+    <h1>{{ u.name }}</h1>
+    {% if u.other_names %}<p class="aka">Also named {{ u.other_names }}</p>{% endif %}
+    <p class="lede"><span class="cat cat-{{ (u.category or 'Unclassified')|replace(' ', '-')|lower }}">{{ u.category or "Unclassified" }}</span>
+      {{ kind }}{% if u.format %}, {{ u.format }}{% if u.format_version %} {{ u.format_version }}{% endif %}{% endif %}</p>
+
+    <dl class="meta">
+      <dt>Size</dt><dd>{{ u.size }} <span class="muted">({{ "{:,}".format(u.size_bytes or 0) }} bytes)</span></dd>
+      {% if u.modified %}<dt>Modified</dt><dd>{{ u.modified }}{% if u.modified_latest and u.modified_latest != u.modified %} <span class="muted">(latest copy {{ u.modified_latest }})</span>{% endif %}</dd>{% endif %}
+      {% if u.created %}<dt>Created</dt><dd>{{ u.created }}</dd>{% endif %}
+      {% if u.puid %}<dt>PRONOM</dt><dd>{{ u.puid }}{% if u.mime %} <span class="muted">{{ u.mime }}</span>{% endif %}</dd>{% elif u.mime %}<dt>MIME type</dt><dd>{{ u.mime }}</dd>{% endif %}
+      {% if u.mac_type %}<dt>Mac type</dt><dd><code>{{ u.mac_type }}</code> / creator <code>{{ u.mac_creator }}</code></dd>{% endif %}
+      <dt>Copies</dt><dd>{{ u.copies }} on {{ u.drives }} source drive{{ "" if u.drives == 1 else "s" }}{% if u.volumes > 1 %}, {{ u.volumes }} archive drives{% endif %}</dd>
+      {% if u.sha256 %}<dt>SHA-256</dt><dd class="hash">{{ u.sha256 }}</dd>{% else %}<dt>Checksum</dt><dd>{{ u.checksum }}</dd>{% endif %}
+      {% if why %}<dt>Why {{ u.category or "Unclassified" }}</dt>
+        <dd>{% if why.matched %}Folder “{{ why.matched }}” matched the rule <code>{{ why.rule }}</code>{% else %}No rule matched its folders{% endif %}
+          {% if not why.shown %}<div class="muted">in the copy at {{ why.archive }}: {{ why.path }}</div>{% endif %}
+          {% if by_copy %}<div class="muted">Copies by category: {{ by_copy }}</div>{% endif %}</dd>{% endif %}
+    </dl>
+  </div>
+</article>
+
+<section class="copies">
+  <h2>Where it is</h2>
+  <table class="list">
+    <thead><tr><th>Archive drive</th><th>Source drive</th><th>Path</th><th>Modified</th>{% if CFG.mode == 'local' %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for c in copies %}
+      <tr>
+        <td>{{ c.archive }}</td>
+        <td>{{ c.drive }}</td>
+        <td class="path">{{ c.path }}</td>
+        <td>{{ c.modified }}</td>
+        {% if CFG.mode == 'local' %}
+        <td class="actions">
+          {% if vols[c.archive] %}
+          <button type="button" class="reveal" data-id="{{ c.id }}">Reveal in Finder</button>
+          {% else %}<span class="muted">Plug in “{{ c.archive }}”</span>{% endif %}
+          <button type="button" class="copypath" data-path="{{ CFG.volumes_root }}/{{ c.archive }}/{{ c.path }}">Copy path</button>
+          {% if allows_delete and vols[c.archive] %}<button type="button" class="delete" data-id="{{ c.id }}"
+            data-what="this copy ({{ c.archive }}: {{ c.path }})">Delete</button>{% endif %}
+        </td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if allows_delete and copies %}
+  {% set unplugged = vols|dictsort|rejectattr(1)|map(attribute=0)|list %}
+  <p class="delete-all">{% if unplugged %}<span class="muted">To delete every copy, plug in {{ unplugged|join(", ") }}.</span>
+    {% else %}<button type="button" class="delete" data-uid="{{ u.id }}"
+      data-what="{{ 'this file' if copies|length == 1 else 'all ' ~ copies|length ~ ' copies of this file' }}">Delete {{ "this file" if copies|length == 1 else "all " ~ copies|length ~ " copies" }}</button>{% endif %}</p>
+  {% endif %}
+  <p class="status" role="status" aria-live="polite"></p>
+
+  {% if removed %}
+  <h3>Formerly also at</h3>
+  <ul class="removed">
+    {% for r in removed %}<li><span class="path">{{ r.archive }}: {{ r.path }}</span> <span class="muted">— extra copy removed {{ r.removed_at[:10] }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{% if neighbours %}
+<section class="neighbours">
+  <h2>Also in this folder <span class="muted path">{{ u.archive }}: {{ folder or "/" }}</span></h2>
+  <div class="lightbox small">
+    {% for n in neighbours %}{{ mount(n, show_cat=False) }}{% endfor %}
+  </div>
+  <p><a href="{{ url_for('browse', a=u.archive, p=folder) }}">Open this folder</a></p>
+</section>
+{% endif %}
+{% endblock %}

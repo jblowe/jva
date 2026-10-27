@@ -1,0 +1,155 @@
+pattern,category,strength,note
+# Rules for classify_archive.py. Edit freely; lines starting with # are ignored.
+# pattern   : a regular expression, matched (ignoring case) against each folder name and the
+#             file name in a file's path. \b = word boundary.
+# category  : TAP | SE Asian Archaeology | Other Archaeology | Class | Museum | Other
+# strength  : strong   = a specific name (site, project, course number)
+#             broad    = (TAP only) a wide net -- loses to a strong match of another category
+#                        in the same folder name (e.g. "Thiel Photo Scanning Project")
+#             weak     = a general word that only decides when nothing stronger matches
+#             nottap   = a place outside Thailand (China, World Trip, Istanbul, ...): like
+#                        strong, and when it is a FOLDER name it also cancels any TAP match
+#                        in the folders above it ("Slide Scanning Project/World Trip/China"
+#                        is not TAP). A TAP match in that folder name itself or deeper still
+#                        counts, and a place in a FILE name never cancels TAP
+#                        ("TAP Export Records/TAP 94/TAP94.export.rome1" stays TAP)
+#             override = YOUR EXCEPTIONS: beats everything, including TAP, wherever it is
+#                        e.g.   ^Voelker Sabbatical 2013 material$,Other,override,
+# How a file is classified:
+#   1. the deepest OVERRIDE match anywhere in its path      -> that category
+#   2. a strong (or uncontradicted broad) TAP match anywhere -> TAP, unless a "nottap"
+#      folder lies below it
+#      ... except in a computer/drive/backup-like folder name ("TAP Voelker mac laptop",
+#      "TAP - KEEP", "TAP from Museum wd"), where TAP only counts as weak
+#   3. otherwise the deepest folder/file with a strong match decides
+#   4. otherwise the deepest weak match decides
+#   5. otherwise                                              -> Unclassified
+#   (drive names -- copied source drives and the archive drives themselves -- are only used
+#   as a last resort)
+# A distinct file (all its identical copies together) is TAP if ANY copy is TAP; otherwise
+# the first of Class, SE Asian Archaeology, Other Archaeology, Museum, Other found among its copies.
+#
+# ---- TAP: Thailand Archaeometallurgy Project
+\btap\b,TAP,strong,
+\bnpw\b,TAP,strong,Non Pa Wai
+non[ _-]?pa[ _-]?wai,TAP,strong,
+\bnkh\b,TAP,strong,Nil Kham Haeng
+nil[ _-]?kham[ _-]?haeng,TAP,strong,
+\bnml\b,TAP,strong,Non Mak La
+non[ _-]?mak[ _-]?la,TAP,strong,
+\bking narai\b,TAP,strong,KNNM
+\bpl\b,TAP,strong,Phu Lon
+\baw\b,TAP,strong,Andy Weiss
+\bweiss\b,TAP,strong,Andy Weiss
+\btreadway\b,TAP,strong,Drawings
+phu[ _-]?lon,TAP,strong,
+lop[ _-]?buri,TAP,strong,
+khao[ _-]?wong[ _-]?prachan,TAP,strong,
+\bkwp\b,TAP,strong,Khao Wong Prachan
+pigott,TAP,broad,a person: a place in the same folder name ("Abydos Egypt Pigott slides") wins
+\bbvm\b,TAP,strong,always appears with TAP -- please confirm
+\bcut[ _-]?outs?\b,TAP,strong,TAP object cutouts
+\bthai\b,TAP,broad,Thailand trip folders count as TAP
+\bthailand\b,TAP,broad,Thailand trip folders count as TAP
+\blot[ _-]?sherds?\b,TAP,strong,excavation sherds by lot/operation -- please confirm
+\bflake project\b,TAP,strong,as in "TAP Flake Project at Penn"
+\bpaddle and anvils?\b,TAP,strong,
+\bbnw\b,TAP,strong,Ban Non Wat
+ban[ _-]?non[ _-]?wat,TAP,strong,
+\b(gray|grey|black|green|turquoise|blue|red|brown|yellow) notebook,TAP,broad,the field notebooks
+^(?!.*museum).*\bslides?[ _-]?scan,TAP,broad,the slide-scan project (except museum slide scans)
+^(?!.*museum).*\bscanning project\b,TAP,broad,
+^(?!.*museum).*\bscanned slides\b,TAP,broad,
+# ---- SE Asian archaeology, other than TAP
+\bpf\b,SE Asian Archaeology,strong,
+angkor,SE Asian Archaeology,nottap,
+\bkhmer\b,SE Asian Archaeology,nottap,
+ban[ _-]?chiang,SE Asian Archaeology,strong,
+\bcambodia,SE Asian Archaeology,nottap,
+\blao(s|tian)\b,SE Asian Archaeology,nottap,the country
+\blao\b,SE Asian Archaeology,strong,Lao people/whiskey -- also in NE Thailand, so it doesn't cancel TAP
+viet[ _-]?nam,SE Asian Archaeology,nottap,
+\bmyanmar\b,SE Asian Archaeology,nottap,
+\bburma\b,SE Asian Archaeology,nottap,
+\bippa\b,SE Asian Archaeology,strong,Indo-Pacific Prehistory Association
+dong[ _-]?son,SE Asian Archaeology,strong,
+\bindonesia,SE Asian Archaeology,nottap,
+\bmalaysia,SE Asian Archaeology,nottap,
+\bphilippin,SE Asian Archaeology,nottap,
+\b(china|chinese|beijing|shanghai|hong ?kong)\b,SE Asian Archaeology,nottap,
+# ---- Other archaeology
+hopewell,Other Archaeology,nottap,
+\bthiel\b,Other Archaeology,nottap,not TAP
+\bmaya\b,Other Archaeology,nottap,
+\begypt,Other Archaeology,nottap,
+\bnorthwest coast\b,Other Archaeology,nottap,
+\biran\b,Other Archaeology,nottap,e.g. Vince Pigott's Iran work
+\b(turkey|turkish|anatolia)\b,Other Archaeology,nottap,
+\b(greece|cyprus|israel|jordan)\b,Other Archaeology,nottap,
+\bperu\b,Other Archaeology,nottap,
+archaeolog,Other Archaeology,weak,
+\bexcavat,Other Archaeology,weak,
+\bpottery\b,Other Archaeology,weak,
+\bceramics?\b,Other Archaeology,weak,
+\bartifacts?\b,Other Archaeology,weak,
+\bstone tools?\b,Other Archaeology,weak,
+\broman\b,Other Archaeology,weak,
+\bgreek\b,Other Archaeology,weak,
+# ---- YOUR EXCEPTIONS (strength "override"): add lines here, e.g.
+# ^Voelker Sabbatical 2013 material$,Other,override,
+# ---- Museum (exhibits, displays, collections work, museum photography)
+beh?e?ringer,Museum,strong,Behringer-Crawford Museum (also misspelled Beheringer)
+\bunacc\w*ed objects\b,Museum,strong,catches the "Unaccesesed" spelling too
+\bhallway display\b,Museum,strong,
+\bslides of record\b,Museum,strong,
+\bethno ?video,Museum,strong,"Voelker ethno video projects"
+\bgrid project\b,Museum,strong,
+\bexhibits?\b,Museum,strong,
+\bdisplays?\b,Museum,strong,
+museum of anthropology,Museum,strong,
+anthropology museum,Museum,strong,
+museum (digital|photo|website|students|projects?)\b,Museum,strong,
+\bmuseum\b,Museum,weak,often just a computer's name ("From museum computer"); only decides when nothing else matches
+# ---- Class materials
+\bant[ _-]?\d{3}[a-z]?\b,Class,strong,course numbers such as ANT194 or ANT 318
+blackboard,Class,strong,
+\bcanvas\b,Class,strong,
+syllab(us|i),Class,weak,
+\blectures?\b,Class,weak,
+\bexams?\b,Class,weak,
+\bquiz(zes)?\b,Class,weak,
+\bgrades?\b,Class,weak,
+\bcourses?\b,Class,weak,
+\bstudents?\b,Class,weak,
+\b(fall|spring|summer|winter)[ _-]?(19|20)\d\d\b,Class,weak,semester folders
+# ---- Other (admin, personal, travel, software, films)
+\bdean\b,Other,strong,
+\bgrants?\b,Other,weak,
+\bbudgets?\b,Other,weak,
+british columbia,Other,nottap,
+\bistanbul\b,Other,nottap,
+\bbulgaria\b,Other,nottap,
+emily carr,Other,strong,
+\bvacation\b,Other,strong,
+\bsystem folder\b,Other,strong,
+\brecycled\b,Other,weak,
+\bapplications\b,Other,weak,
+\.app$,Other,weak,
+\[(19|20)\d\d\],Other,strong,film files named like Title.[2005]
+\bitunes\b,Other,strong,
+\breceipts?\b,Other,strong,
+\bsabbatical\b,Other,weak,
+\bi[ _-]?phone\b,Other,strong,phone photo downloads
+\bphone photo,Other,strong,
+\bworld trip\b,Other,nottap,travel slides (Japan / India / China ...)
+\bwt\b,Other,nottap,World Trip abbreviated ("JV WT slide scans from carousel 2018")
+# places outside Thailand (travel and other work): never TAP when they are a folder below a TAP one
+\b(japan|tokyo|kyoto)\b,Other,nottap,
+\b(india|nepal|tibet|bhutan|sri lanka)\b,Other,nottap,
+\b(korea|taiwan|mongolia)\b,Other,nottap,
+\b(africa|ghana|kenya|tanzania|morocco)\b,Other,nottap,
+\b(mexico|hawaii|alaska|canada)\b,Other,nottap,
+\b(europe|england|london|scotland|ireland|wales|france|paris|italy|rome|spain|portugal|germany|austria|switzerland|holland|netherlands|norway|sweden|iceland|russia)\b,Other,nottap,
+\b(australia|new zealand)\b,Other,nottap,
+\bvideo library\b,Other,weak,
+\brecycler\b,Other,weak,

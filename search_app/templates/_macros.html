@@ -1,0 +1,37 @@
+{% macro mount(r, show_cat=True) -%}
+{# one result, drawn as a 35 mm slide mount #}
+{% set key = r.sha256 or ('u' ~ r.id) %}
+<a class="mount" href="{{ url_for('file_page', key=key) }}">
+  <span class="window"><img loading="lazy" src="{{ url_for('image', size='thumb', key=key) }}" alt=""></span>
+  <span class="caption">
+    <span class="name" title="{{ r.name }}">{{ r.name }}</span>
+    <span class="facts">
+      {%- if r.size_bytes is defined and r.size_bytes is not none %}<span>{{ r.size_bytes|human }}</span>{% elif r.size is defined %}<span>{{ r.size|human }}</span>{% endif -%}
+      {%- if r.sites %}<span class="site">{{ r.sites }}</span>{% endif -%}
+      {%- if r.seasons %}<span class="season" title="Season">’{{ r.seasons|replace(", ", ", ’") }}</span>{% endif -%}
+      {%- if r.copies is defined and r.copies and r.copies > 1 %}<span class="copies" title="{{ r.copies }} identical copies">×{{ r.copies }}</span>{% endif -%}
+    </span>
+    {% if show_cat %}<span class="cat cat-{{ r.category|replace(' ', '-')|lower }}">{{ r.category }}</span>{% endif %}
+  </span>
+</a>
+{%- endmacro %}
+
+{% macro facet(title, name, items, selected, labels=None) -%}
+{# values you have ticked stay listed (with 0) even when nothing matches, so they can be unticked #}
+{% set shown = (items or [])|map('first')|map('string')|list %}
+{% set items = (items or []) + selected|reject('in', shown)|map('list')|map('add_zero')|list %}
+{% if items %}
+<fieldset class="facet">
+  <legend>{{ title }}</legend>
+  {% for value, count in items %}
+  {% set v = value|string %}
+  <label class="opt">
+    <input type="checkbox" name="{{ name }}" value="{{ v }}" {% if v in selected %}checked{% endif %}
+           onchange="this.form.submit()">
+    <span class="lbl">{{ labels[v] if labels and v in labels else v }}</span>
+    <span class="n">{{ "{:,}".format(count) }}</span>
+  </label>
+  {% endfor %}
+</fieldset>
+{% endif %}
+{%- endmacro %}

@@ -218,3 +218,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- jva: data and machine-specific settings never go in the repository ----
+config.json
+search_app/config.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+derivatives/
+_derivatives/
+.DS_Store
+._*

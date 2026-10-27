@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import mount, facet %}
+{% block title %}{{ q or "All files" }} – {{ CFG.title }}{% endblock %}
+{% block body %}
+<form class="layout" method="get" action="{{ url_for('search') }}" id="filters">
+  <input type="hidden" name="q" value="{{ q }}">
+  <input type="hidden" name="view" value="{{ view }}">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ direction }}">
+  <aside class="rail">
+    {% set site_labels = {} %}
+    {% for s in SITES %}{% set _ = site_labels.update({s: s|upper}) %}{% endfor %}
+    {{ facet("Site", "site", facets.site, filters.site, site_labels) }}
+    {{ facet("Season", "season", facets.season, filters.season) }}
+    {{ facet("Category", "cat", facets.cat, filters.cat) }}
+    {{ facet("Kind", "kind", facets.kind, filters.kind) }}
+    {{ facet("Copies", "copies", facets.copies, filters.copies, {"single": "Only one copy", "dup": "Two or more copies"}) }}
+    {{ facet("Preview image", "preview", facets.preview, filters.preview, {"yes": "Has a preview", "no": "No preview yet"}) }}
+    {{ facet("Archive drive", "archive", facets.archive, filters.archive) }}
+    {{ facet("Source drive", "drive", facets.drive, filters.drive) }}
+    {% if filters.values()|select|list %}<a class="clear" href="{{ url_for('search', q=q) }}">Clear filters</a>{% endif %}
+  </aside>
+
+  <section class="results">
+    <div class="resultbar">
+      <p class="count">
+        {% if error %}{{ error }}
+        {% elif total == 0 %}Nothing matches{% if q %} “{{ q }}”{% endif %}. Try fewer words, or clear a filter.
+        {% else %}{{ "{:,}".format(total) }} distinct file{{ "" if total == 1 else "s" }}{% if q %} matching “{{ q }}”{% endif %}{% endif %}
+      </p>
+      <div class="controls">
+        <label>Sort by
+          <select onchange="this.form.sort.value=this.value; this.form.dir.value=''; this.form.submit()" form="filters">
+            {% for k, label in sorts.items() %}
+            <option value="{{ k }}" {% if k == sort %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <span class="viewswitch">
+          {% set a = request.args.to_dict(flat=False) %}
+          <a href="{{ url_for('search', **dict(a, view='grid', page=1)) }}" {% if view == 'grid' %}aria-current="true"{% endif %}>Slides</a>
+          <a href="{{ url_for('search', **dict(a, view='list', page=1)) }}" {% if view == 'list' %}aria-current="true"{% endif %}>List</a>
+        </span>
+      </div>
+    </div>
+
+    {% if view == "list" %}
+    <table class="list">
+      {% set a = request.args.to_dict(flat=False) %}
+      {% macro sorthead(key, label, cls="") -%}
+        {%- set on = sort == key -%}
+        {%- set nextdir = ("desc" if direction == "asc" else "asc") if on else "" -%}
+        <th class="{{ cls }}" {% if on %}aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}>
+          {%- if key in sorts -%}
+          <a class="sorter{% if on %} on{% endif %}" href="{{ url_for('search', **dict(a, sort=key, dir=nextdir, page=1)) }}">{{ label }}{% if on %}<span class="arrow" aria-hidden="true">{{ "▲" if direction == "asc" else "▼" }}</span>{% endif %}</a>
+          {%- else %}{{ label }}{% endif -%}
+        </th>
+      {%- endmacro %}
+      <thead><tr><th></th>{{ sorthead("name", "Name") }}{{ sorthead("site", "Site") }}{{ sorthead("season", "Season") }}{{ sorthead("folder", "Folder") }}{{ sorthead("kind", "Kind") }}{{ sorthead("size", "Size", "r") }}{{ sorthead("copies", "Copies", "r") }}{{ sorthead("category", "Category") }}</tr></thead>
+      <tbody>
+      {% for r in rows %}{% set key = r.sha256 or ('u' ~ r.id) %}
+        <tr>
+          <td class="tiny"><img loading="lazy" src="{{ url_for('image', size='thumb', key=key) }}" alt=""></td>
+          <td><a href="{{ url_for('file_page', key=key) }}">{{ r.name }}</a>{% if r.other_names %}<div class="aka">also {{ r.other_names }}</div>{% endif %}</td>
+          <td>{{ r.sites }}</td>
+          <td>{{ r.seasons }}</td>
+          <td class="path">{{ r.folder }}</td>
+          <td>{{ r.kind }}</td>
+          <td class="r">{{ r.size_bytes|human }}</td>
+          <td class="r">{{ r.copies }}</td>
+          <td><span class="cat cat-{{ r.category|replace(' ', '-')|lower }}">{{ r.category }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="lightbox">
+      {% for r in rows %}{{ mount(r) }}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if pages > 1 %}
+    {% set a = request.args.to_dict(flat=False) %}
+    <nav class="pager" aria-label="Pages">
+      {% if page > 1 %}<a href="{{ url_for('search', **dict(a, page=page - 1)) }}">Previous</a>{% endif %}
+      <span>Page {{ page }} of {{ "{:,}".format(pages) }}</span>
+      {% if page < pages %}<a href="{{ url_for('search', **dict(a, page=page + 1)) }}">Next</a>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+</form>
+{% endblock %}
