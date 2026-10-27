@@ -33,12 +33,16 @@ Steps (each picks up where it left off if interrupted; later runs only do new or
 files; a run only ever changes catalogue entries for the archive drive given):
   1. scan      list every file on the volume; read classic Mac type/creator codes and
                resource-fork sizes (old Mac files often have no extension)
-  2. hash      SHA-256 of every file on this volume that doesn't have one yet. Used to
+  2. hash      SHA-256 of every file on this volume that doesn't have one yet (files that
+               couldn't be read last time are tried again). Used to
                find identical files across all archive drives, and as a fixity record
                (to check later that nothing has changed or decayed).
   3. identify  Siegfried (PRONOM) format identification from file contents.
                Install:  brew install richardlehane/digipres/siegfried
-               Without it, falls back to `file --mime-type` (MIME type only).
+               Without it, falls back to `file --mime-type` (MIME type only). Files it
+               couldn't open last time are tried again.
+If the drive is unplugged or drops out during steps 2-3, the run stops without marking the
+files it couldn't reach as unreadable; run it again once the drive is back.
   4. unique    rebuild the unique_files table: one row per distinct file (identical copies
                share one row; `copies` says how many there are, `locations` lists them),
                with a full-text search index (unique_search). files.unique_id links each
@@ -322,7 +326,26 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+class DriveGone(Exception):
+    """The archive drive went away (unplugged, or it dropped off the bus) during a run."""
+
+
+def check_drive(root):
+    """Raise DriveGone unless the archive drive is still there."""
+    if not (os.path.ismount(root) if str(root).startswith("/Volumes/") else Path(root).is_dir()):
+        raise DriveGone(f"{root} is no longer there: the drive was unplugged or dropped out. "
+                        "Nothing was recorded for the files it couldn't reach; plug it in and run "
+                        "this again to carry on.")
+
+
 def hash_files(db, archive, root):
+    # Files that couldn't be read on an earlier run are tried again: the usual cause is the
+    # drive dropping out for a moment, and then they read fine.
+    retry = db.execute("UPDATE files SET hash_error=NULL WHERE archive=? AND hash_error IS NOT NULL "
+                       "AND sha256 IS NULL", (archive,)).rowcount
+    db.commit()
+    if retry:
+        log(f"   trying again {retry:,} files that couldn't be read last time")
     where = "archive=? AND sha256 IS NULL AND hash_error IS NULL AND junk=0"
     todo_n, todo_b = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM files WHERE {where}",
                                 (archive,)).fetchone()
@@ -338,6 +361,7 @@ def hash_files(db, archive, root):
             try:
                 db.execute("UPDATE files SET sha256=? WHERE id=?", (sha256_file(root / rel), fid))
             except OSError as e:
+                check_drive(root)              # the whole drive gone: stop, record nothing
                 db.execute("UPDATE files SET hash_error=? WHERE id=?", (e.strerror or str(e), fid))
                 log(f"   can't read {rel}: {e.strerror}")
             done_n += 1
@@ -357,6 +381,12 @@ def identify(db, archive, root, batch=2000):
     sf = shutil.which("sf")
     # With Siegfried, also redo files that only got a MIME type from `file` on an earlier run,
     # or that `file` gave no answer for. (Siegfried's own failures aren't retried in a loop.)
+    # Files Siegfried couldn't open last time ("file access error") are tried again, as for hashing.
+    retry = db.execute(f"UPDATE files SET id_error=NULL, id_tool=NULL WHERE archive=? AND {ACCESS_ERROR}",
+                       (archive,)).rowcount
+    db.commit()
+    if retry:
+        log(f"   trying again {retry:,} files that couldn't be opened last time")
     if sf:
         where = ("archive=? AND junk=0 AND (id_tool IS NULL OR id_tool='file') AND "
                  "(id_error IS NULL OR id_error IN ('no result from file', 'no result from identifier'))")
@@ -375,7 +405,10 @@ def identify(db, archive, root, batch=2000):
         bad = [(fid,) for fid, rel in rows if "\n" in rel or "\r" in rel]
         db.executemany("UPDATE files SET id_error='newline in file name' WHERE id=?", bad)
         rows = [(fid, rel) for fid, rel in rows if "\n" not in rel and "\r" not in rel]
+        check_drive(root)
         results = (_run_sf(sf, root, rows) if sf else _run_file(root, rows))
+        if any(_access_error(v[7]) for v in results.values()):
+            check_drive(root)                  # every file "missing" because the drive went
         got = set()
         for fid, vals in results.items():
             db.execute("""UPDATE files SET puid=?, format=?, format_version=?, mime=?, id_basis=?,
@@ -390,6 +423,13 @@ def identify(db, archive, root, batch=2000):
             log(f"   identified {done:,}/{todo:,} files ({done / (last - t0):.0f}/s)")
     log(f"   identified {done:,} files in {time.time() - t0:.0f}s")
     return done
+
+
+ACCESS_ERROR = "id_error LIKE '%file access error%'"
+
+
+def _access_error(err):
+    return bool(err) and "file access error" in err
 
 
 def _run_sf(sf, root, rows):
@@ -601,9 +641,14 @@ def main():
         sdirs = source_dirs(outdir, archive)
         log(f"== {archive}  ({vol})")
         log("1. scan");     scan(db, archive, vol, sdirs); relabel(db, archive, sdirs)
-        log("2. hash");     hash_files(db, archive, vol)
-        if not a.skip_identify:
-            log("3. identify"); identify(db, archive, vol)
+        try:
+            log("2. hash");     hash_files(db, archive, vol)
+            if not a.skip_identify:
+                log("3. identify"); identify(db, archive, vol)
+        except DriveGone as e:
+            db.commit()
+            db.close()
+            sys.exit(f"Stopped: {e}")
     log("4. unique files");  n_unique = build_unique(db)
     log("5. reports")
     s = reports(db, outdir)
