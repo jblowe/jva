@@ -30,18 +30,14 @@ import sys
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from kinds import RULES_VERSION, kind_of, tags_of  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+from jva.kinds import RULES_VERSION, kind_of, tags_of  # noqa: E402
 
 
 
 def default_catalogue():
-    p = Path(os.environ.get("ARCHIVE_SEARCH_CONFIG", HERE / "config.json"))
-    cat = "../archive_catalog.sqlite"
-    if p.exists():
-        cat = json.loads(p.read_text(encoding="utf-8")).get("catalogue", cat)
-    return str(cat if os.path.isabs(cat) else (HERE / cat).resolve())
+    return str(CONFIG.catalogue)
 
 
 def step(msg, t0):

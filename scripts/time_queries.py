@@ -17,7 +17,7 @@ import sys
 import time
 import types
 
-os.environ["ARCHIVE_SEARCH_NO_WARM"] = "1"
+os.environ["JVA_NO_WARM"] = "1"
 
 
 class _Stub:
@@ -51,8 +51,8 @@ except ImportError:
     fake.g = types.SimpleNamespace()
     sys.modules["flask"] = fake
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import archive_search as A  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "webapp"))
+import app as A  # noqa: E402
 
 
 class Timed:
@@ -98,7 +98,7 @@ def page_queries(q, filters):
     sort = "relevance" if q else "name"
     A.db().execute(f"SELECT COUNT(*) FROM {frm}{where}", params)
     A.db().execute(f"""SELECT u.id, u.name, {A.kind_sql()} kind FROM {frm}{where}
-                       ORDER BY {A.SORTS[sort]} LIMIT ? OFFSET ?""", params + [60, 0])
+                       ORDER BY {A.order_by(sort, A.SORTS[sort][2])} LIMIT ? OFFSET ?""", params + [60, 0])
     A.facet_counts.__wrapped__(q, tuple(sorted(filters.items())), None)
 
 

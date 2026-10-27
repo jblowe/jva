@@ -34,8 +34,10 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent
-VOLUMES = "/Volumes"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = CONFIG.data_dir             # catalogue, reports and drive records
+VOLUMES = CONFIG.volumes_root
 CLUTTER = {".DS_Store", "._.DS_Store"}
 MAX_LOCATIONS = 100
 
@@ -330,8 +332,7 @@ def refresh_unique(db, uid):
         db.executemany("INSERT OR IGNORE INTO unique_archives VALUES (?,?)", {(uid, r[0]) for r in rows})
     if has_table(db, "unique_tags"):
         try:
-            sys.path.insert(0, str(PROJECT_DIR / "search_app"))
-            from kinds import tags_of
+            from jva.kinds import tags_of
             tags = set()
             for r in rows:
                 tags |= tags_of(r[2])

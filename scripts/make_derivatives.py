@@ -73,7 +73,9 @@ import time
 import unicodedata
 from pathlib import Path
 
-PROJECT_DIR = "/Users/johnlowe/Claude/Projects/Voelker"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 MARKER = ".archive-derivatives"          # identify_archive.py skips folders containing this
 THUMB_PX, PREVIEW_PX = 480, 1200
 THUMB_Q, PREVIEW_Q = 75, 80
@@ -579,7 +581,9 @@ def main():
     ap = argparse.ArgumentParser(description="Make WebP thumbnails/previews for archive files.")
     ap.add_argument("-a", "--archive", required=True,
                     help="archive volume to work from: name in /Volumes, or a path")
-    ap.add_argument("-d", "--dest", required=True, help="derivatives folder")
+    ap.add_argument("-d", "--dest", required=CONFIG.derivatives_dir is None,
+                    default=str(CONFIG.derivatives_dir) if CONFIG.derivatives_dir else None,
+                    help="derivatives folder (default: derivatives_dir in config.json)")
     ap.add_argument("--workers", type=int, default=4, help="files processed in parallel (default 4)")
     ap.add_argument("--retry-failed", action="store_true", help="try earlier failures again")
     ap.add_argument("--limit", type=int, default=0, help="stop after N files (for a trial run)")

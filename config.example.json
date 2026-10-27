@@ -1,0 +1,17 @@
+{
+  "data_dir": "/Users/johnlowe/Claude/Projects/Voelker",
+  "volumes_root": "/Volumes",
+  "derivatives_dir": "/Volumes/TAP PROJECT/_derivatives",
+  "app": {
+    "mode": "local",
+    "derivatives_roots": ["/Volumes/TAP PROJECT/_derivatives"],
+    "host": "localhost",
+    "port": 5001,
+    "title": "Voelker Archive"
+  },
+  "publish": {
+    "exclude_categories": ["Class", "Unclassified"],
+    "server": "ubuntu@jva.johnblowe.com",
+    "remote_dir": "/srv/jva-data"
+  }
+}

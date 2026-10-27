@@ -63,7 +63,9 @@ import tempfile
 import time
 from pathlib import Path
 
-PROJECT_DIR = "/Users/johnlowe/Claude/Projects/Voelker"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 # catalogues made before archive drives were tracked: all files were on this volume,
 # with paths relative to this folder
 LEGACY_ARCHIVE = ("TAP 4T 2019", "CumulativeArchive")
@@ -775,7 +777,7 @@ def appledouble_orphans(db):
 def prepare_for_search(outdir):
     """Keep the search app fast: rebuild its helper tables (search_app/prepare_search.py, which
     also runs ANALYZE), or at least refresh SQLite's statistics."""
-    helper = Path(outdir) / "search_app" / "prepare_search.py"
+    helper = Path(__file__).resolve().parent / "prepare_search.py"
     cat = Path(outdir) / "archive_catalog.sqlite"
     log("6. prepare for searching")
     if helper.exists():

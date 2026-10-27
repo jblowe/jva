@@ -50,7 +50,9 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_DIR = "/Users/johnlowe/Claude/Projects/Voelker"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 CHUNK = 8 * 1024 * 1024
 
 REMOVED_SCHEMA = """

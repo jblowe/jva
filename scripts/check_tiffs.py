@@ -27,8 +27,10 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent
-VOLUMES = "/Volumes"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = CONFIG.data_dir             # catalogue, reports and drive records
+VOLUMES = CONFIG.volumes_root
 TYPE_SIZE = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4, 16: 8, 17: 8, 18: 8}
 POINTER_TAGS = {34665: "Exif", 34853: "GPS", 40965: "Interoperability", 330: "SubIFD"}
 MAX_ENTRIES = 1000            # more entries than this in one directory means it isn't one

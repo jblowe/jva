@@ -64,7 +64,9 @@ from pathlib import Path
 
 # archive_map.csv rows written before archive drives were recorded all went here:
 LEGACY_ARCHIVE = ("TAP 4T 2019", "CumulativeArchive")
-PROJECT_DIR = "/Users/johnlowe/Claude/Projects/Voelker"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 
 SKIP_DIRS = {".Spotlight-V100", ".fseventsd", ".Trashes", ".DocumentRevisions-V100",
              ".TemporaryItems", ".MobileBackups", "$RECYCLE.BIN", "System Volume Information"}

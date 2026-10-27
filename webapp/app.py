@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 """
-archive_search.py -- search and browse the archive catalogue (archive_catalog.sqlite).
+webapp/app.py -- search and browse the archive catalogue (archive_catalog.sqlite).
 
-    python3 -m pip install flask        # once
-    python3 archive_search.py           # then open http://127.0.0.1:5000
+    python3 -m pip install -r requirements.txt     # once
+    python3 webapp/app.py                          # then open http://127.0.0.1:5000
 
-Settings come from config.json next to this file (all optional; see config.example.json):
-  catalogue          path to archive_catalog.sqlite      (default: ../archive_catalog.sqlite)
+Settings: the "app" section of config.json at the top of the repository (see
+config.example.json and docs/search-app.md); the catalogue is the one named there.
   derivatives_roots  folders to look in for the preview images, in order. The derivatives
                      table stores image paths relative to the derivatives folder, so when the
                      folder moves, list its new location here. The location each image was
                      made in is always tried last.
-  mode               "local": Reveal in Finder and drive status (this Mac only)
-                     "public": neither -- for a web server such as the EC2 instance
-  hide_categories    categories never shown, e.g. ["Other", "Class"] (for public use)
-  volumes_root       where archive drives are mounted                 (default: /Volumes)
+  mode               "local": Reveal in Finder, drive status, originals, Delete (this Mac only)
+                     "public": none of those -- for the web server
+  hide_categories    categories never shown, e.g. ["Other", "Class"]
   host, port         default 127.0.0.1 and 5000 (local only)
   title              shown in the page header
 
-The catalogue is opened read-only: nothing here changes it.
-For a public server, run it under gunicorn behind nginx:  gunicorn -w 3 archive_search:app
+The catalogue is opened read-only (deleting, in local mode, uses scripts/delete_files.py).
+On a server it runs under gunicorn: see deploy/ and docs/deployment.md.
 """
 import functools
 import json
@@ -35,30 +34,15 @@ from pathlib import Path
 from flask import Flask, abort, g, jsonify, render_template, request, send_file, url_for
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-DEFAULTS = {
-    "catalogue": "../archive_catalog.sqlite",
-    "derivatives_roots": [],
-    "mode": "local",
-    "hide_categories": [],
-    "volumes_root": "/Volumes",
-    "host": "127.0.0.1",
-    "port": 5000,
-    "title": "Voelker Archive",
-    "page_size": 60,
-    "warm_cache": True,
-    "serve_originals": None,
-    "allow_delete": None,      # None: Delete buttons in local mode only (never in public mode)   # None: yes in local mode (from plugged-in archive drives), no in public mode
-}
+REPO = HERE.parent
+sys.path.insert(0, str(REPO))
+from jva.config import CONFIG  # noqa: E402
 
 
 def load_config():
-    cfg = dict(DEFAULTS)
-    p = Path(os.environ.get("ARCHIVE_SEARCH_CONFIG", HERE / "config.json"))
-    if p.exists():
-        cfg.update(json.loads(p.read_text(encoding="utf-8")))
-    cfg["catalogue"] = str((HERE / cfg["catalogue"]).resolve()) if not os.path.isabs(cfg["catalogue"]) \
-        else cfg["catalogue"]
+    cfg = dict(CONFIG.app)
+    cfg["catalogue"] = str(CONFIG.catalogue)
+    cfg["volumes_root"] = CONFIG.volumes_root
     return cfg
 
 
@@ -68,7 +52,7 @@ app.config["JSON_SORT_KEYS"] = False
 
 CATEGORIES = ["TAP", "SE Asian Archaeology", "Other Archaeology", "Museum", "Class", "Other",
               "Unclassified"]
-from kinds import KINDS, RULES_VERSION, SEASONS, SITES, kind_of  # noqa: E402  (shared with prepare_search.py)
+from jva.kinds import KINDS, RULES_VERSION, SEASONS, SITES, kind_of  # noqa: E402  (shared with prepare_search.py)
 
 
 PLACEHOLDER_FOR_KIND = {"Image": "image", "PDF": "document", "Document": "document",
@@ -474,14 +458,14 @@ app.jinja_env.globals["allows_delete"] = allows_delete()
 def delete():
     """Delete one copy (id = files.id) or every copy of a distinct file (uid = unique_files.id)
     from the archive drives, with their "._" companions, and update the catalogue. Uses
-    delete_files.py (next to this folder), which records each deletion."""
+    scripts/delete_files.py, which records each deletion."""
     if not allows_delete():
         return jsonify(ok=False, message="Deleting is switched off here."), 403
-    sys.path.insert(0, str(HERE.parent))
+    sys.path.insert(0, str(REPO / "scripts"))
     try:
         import delete_files as D
     except ImportError:
-        return jsonify(ok=False, message="delete_files.py is missing from the folder above search_app."), 500
+        return jsonify(ok=False, message="scripts/delete_files.py is missing from the repository."), 500
     fid, uid = request.form.get("id", type=int), request.form.get("uid", type=int)
     reason = (request.form.get("reason") or "").strip()[:200]
     con = sqlite3.connect(CFG["catalogue"], timeout=30)
@@ -728,7 +712,7 @@ def warm_cache():
     threading.Thread(target=run, daemon=True).start()
 
 
-if CFG["warm_cache"] and os.path.exists(CFG["catalogue"]) and "ARCHIVE_SEARCH_NO_WARM" not in os.environ:
+if CFG["warm_cache"] and os.path.exists(CFG["catalogue"]) and "JVA_NO_WARM" not in os.environ:
     warm_cache()
 
 

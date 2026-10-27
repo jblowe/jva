@@ -37,11 +37,14 @@ import sys
 import time
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_DIR))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = CONFIG.data_dir             # catalogue, reports and drive records
+SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS))
 from check_tiffs import MAX_ENTRIES, POINTER_TAGS, TYPE_SIZE, check_tiff  # noqa: E402
 
-VOLUMES = "/Volumes"
+VOLUMES = CONFIG.volumes_root
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tiff_repairs(
   archive TEXT, path TEXT,
@@ -276,7 +279,7 @@ def main():
     if partial:
         print("Some damaged copies weren't plugged in, so repaired and unrepaired copies now differ; "
               "updating the catalogue's list of distinct files ...")
-        subprocess.run([sys.executable, str(PROJECT_DIR / "identify_archive.py"), "--reports",
+        subprocess.run([sys.executable, str(SCRIPTS / "identify_archive.py"), "--reports",
                         "-o", str(out)])
     print("Run check_tiffs.py again to confirm.")
 

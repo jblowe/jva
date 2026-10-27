@@ -42,7 +42,9 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
-PROJECT_DIR = "/Users/johnlowe/Claude/Projects/Voelker"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
+from jva.config import CONFIG  # noqa: E402
+PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 CATEGORIES = ["TAP", "Class", "SE Asian Archaeology", "Other Archaeology", "Museum", "Other",
               "Unclassified"]
 RANK = {c: i for i, c in enumerate(CATEGORIES)}       # lower = wins when copies disagree
@@ -164,11 +166,11 @@ def classify(parts, rules, fallback=None):
 
 def main():
     ap = argparse.ArgumentParser(description="Classify archive files by subject.")
-    ap.add_argument("--rules", default=None, help="rules file (default: classify_rules.csv here)")
+    ap.add_argument("--rules", default=None, help="rules file (default: rules/classify_rules.csv in the repository)")
     ap.add_argument("-o", "--out", default=PROJECT_DIR, help=argparse.SUPPRESS)
     a = ap.parse_args()
     outdir = Path(a.out).expanduser()
-    rules = load_rules(Path(a.rules) if a.rules else outdir / "classify_rules.csv")
+    rules = load_rules(Path(a.rules) if a.rules else CONFIG.rules)
     copied = copied_drives(outdir)
     t0 = time.time()
 
