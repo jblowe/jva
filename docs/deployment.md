@@ -10,7 +10,7 @@ Mac                                         EC2 (Ubuntu 24.04, Apache2)
 ---                                         ---------------------------
 archive_catalog.sqlite --publish.py-->      /mnt/images/jva_data/archive_public.sqlite
 _derivatives/ (images, PDF, RTF) --rsync--> /mnt/images/jva_images/
-~/GitHub/jva  --git push / git pull-->      /home/ubuntu/GitHub/jva   (code, venv, config.json)
+~/GitHub/jva  --git push / git pull-->      ~/jva on the server (code, venv, config.json)
 
 browser --> Apache :443 jva.johnblowe.com
               /derivatives/...  served from /mnt/images/jva_images
@@ -26,9 +26,8 @@ browser --> Apache :443 jva.johnblowe.com
 
    ```sh
    sudo apt install python3.12-venv          # if venv isn't there yet
-   mkdir -p ~/GitHub && cd ~/GitHub
-   git clone https://github.com/jblowe/jva.git
-   cd jva
+   git clone https://github.com/jblowe/jva.git ~/jva
+   cd ~/jva
    python3 -m venv venv
    venv/bin/pip install -r requirements.txt
    cp deploy/server-config.example.json config.json
@@ -119,7 +118,7 @@ running app picks up the new catalogue by itself; no restart.
 On the Mac: commit, then `git push`. On the server:
 
 ```sh
-cd ~/GitHub/jva && git pull
+cd ~/jva && git pull
 venv/bin/pip install -r requirements.txt     # only if requirements.txt changed
 sudo systemctl restart jva
 ```
