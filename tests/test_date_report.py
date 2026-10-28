@@ -38,6 +38,13 @@ class DateReport(unittest.TestCase):
         self.assertEqual(rows["1999"][7], 1)          # unique: Burial 2's earliest creation date
         self.assertEqual(rows["2026"][7], 6)
         self.assertTrue(str(rows["Total"][1]).startswith("=SUM("))
+        self.assertNotIn("2000", rows)                # years without files get no row
+        years = []
+        for row in ws.iter_rows(min_row=6, values_only=True):
+            if row[0] == "Total":
+                break
+            years.append(row[0])
+        self.assertEqual(years, ["1999", "2008", "2026"])
 
 
 if __name__ == "__main__":

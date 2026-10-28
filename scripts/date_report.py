@@ -92,24 +92,10 @@ def collect(db, src, period):
     return all_t, uni_t, origin
 
 
-def periods(keys, period):
-    """Every period from the earliest to now, empty ones too (so a chart of it has no gaps);
-    then any later ones (wrong clocks) as they come, without filling the years between; then
-    "" (no date) if any."""
-    real = sorted(k for k in keys if k)
-    if not real:
-        return [""] if "" in keys else []
-    now = time.strftime("%Y" if period == "year" else "%Y-%m")
-    upto = max([k for k in real if k <= now] or [real[0]])
-    out = []
-    if period == "year":
-        out = [str(y) for y in range(int(real[0]), int(upto) + 1)]
-    else:
-        y, m = int(real[0][:4]), int(real[0][5:7])
-        while f"{y:04d}-{m:02d}" <= upto:
-            out.append(f"{y:04d}-{m:02d}")
-            y, m = (y + 1, 1) if m == 12 else (y, m + 1)
-    return out + [k for k in real if k > upto] + ([""] if "" in keys else [])
+def periods(keys):
+    """The periods that have files, in order, then "" (no date) if any. A period with no
+    files in either distribution gets no row."""
+    return sorted(k for k in keys if k) + ([""] if "" in keys else [])
 
 
 def write_xlsx(path, all_t, uni_t, origin, period, catalogue):
@@ -151,7 +137,7 @@ def write_xlsx(path, all_t, uni_t, origin, period, catalogue):
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             cell.border = Border(bottom=thin) if r == 5 else Border()
 
-    keys = periods(set(all_t) | set(uni_t), period)
+    keys = periods(set(all_t) | set(uni_t))
     first, last = 6, 6 + len(keys) - 1
     total = last + 1
     for i, k in enumerate(keys):
