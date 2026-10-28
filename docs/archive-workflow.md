@@ -34,6 +34,7 @@ In the repository:
 | `scripts/check_tiffs.py`, `scripts/repair_tiffs.py` | Find TIFFs with a damaged directory (the kind macOS Preview won't open) and repair them (see "Damaged TIFFs") |
 | `scripts/prepare_search.py`, `scripts/time_queries.py` | Helper tables that keep the search app fast, and a timer for its queries |
 | `scripts/date_report.py` | A spreadsheet (`creation_dates.xlsx`) of when the files were created, by year, for all files and for distinct files, with how many have creation = modification date. Uses the source drives' dates, since copies on the archive drives are dated by the copying. Needs `openpyxl` |
+| `scripts/word_report.py` | A spreadsheet (`word_documents.xlsx`) of the distinct Word documents and their page counts (Word's saved count; LibreOffice re-paginates those whose count can't be right). Needs `openpyxl` and `olefile` |
 | `scripts/publish.py` | Puts the public part of the archive on the web server (see `docs/deployment.md`) |
 | `webapp/` | The search app: search and browse the catalogue in a web browser, with previews (see "Searching the archive" and `docs/search-app.md`) |
 | `jva/` | Code the scripts and the search app share: the catalogue's tables, drive checks, file kinds, TIFF repair, deletion, ... |
