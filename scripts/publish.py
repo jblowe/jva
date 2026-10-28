@@ -105,6 +105,11 @@ def upload(out_dir, derivatives_dir, server, data_dir, images_dir, keep_old=Fals
     print(f"1. {len(wanted):,} derivative files (only new or changed ones are sent)")
     run(["rsync", "-rt", "--stats", *RSYNC_PERMS, *dry, f"--files-from={listing}",
          f"{derivatives_dir}/", f"{server}:{im}/"])
+    if not dry_run:
+        # Apache (www-data) must be able to read every image and enter every folder. rsync's
+        # --chmod should see to that, but not every rsync honours it (macOS's openrsync), and
+        # folders made by hand may be more private; so make sure, on the server.
+        run(["ssh", server, f"chmod -R u+rwX,go+rX '{im}'"])
     print(f"2. the catalogue ({human(cat.stat().st_size)})")
     run(["rsync", "-t", "--stats", *RSYNC_PERMS, *dry, str(cat), f"{server}:{dd}/{PUBLIC_NAME}.new"])
     if not dry_run:

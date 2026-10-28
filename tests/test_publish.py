@@ -158,11 +158,16 @@ class Upload(unittest.TestCase):
         self.assertTrue((images / "jva_images" / ".jva_images").exists())
 
         # a later upload prunes files the catalogue no longer uses, and only in jva_images
+        thumb = images / "jva_images" / "thumb" / b / "Burial 2.jpg.webp"
+        thumb.chmod(0o600)                                  # unreadable by Apache
+        (images / "jva_images" / "thumb").chmod(0o700)
         (images / "jva_images" / "thumb" / "zz").mkdir()
         (images / "jva_images" / "thumb" / "zz" / "old.webp").write_bytes(b"old")
         r = upload(images / "jva_images")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertFalse((images / "jva_images" / "thumb" / "zz").exists())
+        self.assertEqual(thumb.stat().st_mode & 0o044, 0o044)                      # readable again
+        self.assertEqual((images / "jva_images" / "thumb").stat().st_mode & 0o055, 0o055)
         self.assertTrue((images / "jva_images" / ".jva_images").exists())
         self.assertTrue((images / "other_site" / "pics" / "keep.jpg").exists())
         self.assertFalse(list(images.rglob("lecture*")))

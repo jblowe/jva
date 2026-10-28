@@ -198,7 +198,7 @@ cover the images under `/derivatives/`, not the pages the app makes.
 |---|---|
 | 502 or 503 from Apache | the app isn't running: `systemctl status jva`, `journalctl -u jva -n 50` |
 | The app says the catalogue isn't there | publish with `--upload` first; check `catalogue` in `~/jva/config.json` |
-| Pages work but images are broken (403/404) | `ls -l /mnt/images/jva_images` (Apache must be able to read it); `/var/log/apache2/jva_error.log` |
+| Pages work but images are broken (403 Forbidden) | `sudo tail /var/log/apache2/jva_error.log`. "Permission denied" or "search permissions are missing": Apache can't read the files or enter a folder; `namei -l /mnt/images/jva_images/thumb/...` shows which, and `chmod -R u+rwX,go+rX /mnt/images/jva_images` fixes it (publish.py now does this after each upload). "client denied by server configuration": the request isn't reaching the `<Directory /mnt/images/jva_images>` block; check `sudo apache2ctl -S` that the jva vhost is the one answering, and that it was reloaded after copying |
 | Icons instead of previews for some files | their images weren't in the derivatives folder when you published; publish.py says how many |
 | publish.py stops: "isn't marked" | `remote_images_dir` points at a folder holding other things, see step 3 above |
 | publish.py: "ssh couldn't connect or log in" | try `ssh -i ~/.ssh/jblowe.pem ubuntu@EC2-ADDRESS true`; ssh's message says why: "Permission denied" is the key (`ssh_key`), a timeout is the EC2 security group or the wrong address (`server` must be the instance, not the site name) |
