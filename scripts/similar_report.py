@@ -220,6 +220,36 @@ def write(path, info, res, labels, p1, groups):
     wide = sorted(final_multi, key=lambda v: -len(set().union(*(info[u]["folders"] for u in v))))[:300]
     sheet("Big groups", heads, [group_row(res[v[0]][0], v) for v in wide], widths)
 
+    # ---- Site check: object numbers written with more than one site
+    by_obj = defaultdict(lambda: defaultdict(list))
+    for uid, d in info.items():
+        folder = folder_for(d)
+        r, k = S.pass2_key(d["name"], folder, path=d["path"])
+        if r and r.name in S.OBJECT_RULES:
+            for site in S.sites_named(d["name"], folder) or {"(none)"}:
+                by_obj[k][site].append(uid)
+    rows = []
+    for k, sites in by_obj.items():
+        named = {s: v for s, v in sites.items() if s != "(none)"}
+        if len(named) > 1:
+            rows.append((k, ", ".join(sorted(x.upper() for x in named)), sum(len(v) for v in sites.values()),
+                         "; ".join(f"{x.upper()}: {len(v)}" for x, v in sorted(named.items())),
+                         " | ".join(f"{x.upper()}: {info[v[0]]['location']}" for x, v in sorted(named.items()))))
+    rows.sort(key=lambda r: -r[2])
+    site_rows = rows
+    sheet("Site check", ["Object number", "Sites named", "Distinct files", "Files per site",
+                         "An example for each site"], rows, [14, 16, 10, 30, 160])
+    ws = wb["Summary"]
+    ws["E4"] = "Object numbers written with more than one site (see Site check)"
+    ws["E4"].font = bold
+    ws["F4"] = len(site_rows)
+    ws["E5"] = "Object numbers with a site written somewhere"
+    ws["E5"].font = plain
+    ws["F5"] = sum(1 for sites in by_obj.values() if set(sites) - {"(none)"})
+    ws.column_dimensions["E"].width = 62
+    for c in ("F4", "F5"):
+        ws[c].number_format, ws[c].font = "#,##0", plain
+
     # ---- Name shapes of files left alone
     alone = [u for u, (g, h, k) in res.items() if len(groups[g]) == 1]
     shapes, ex = Counter(), {}

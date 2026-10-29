@@ -71,16 +71,41 @@ class Rule:
 
 NUM = r"(\d{4,6}(?:\.\d{1,2})?)"            # catalogue numbers: 10091, 39903.4
 YEAR = r"(?:19[5-9]\d|20[0-2]\d)"           # 4-digit numbers that are much more often years
+SITE_WORDS = ("npw", "nml", "nkh", "tk", "pl", "pf", "bnw", "ktw")
 RULES = [
     Rule("object number at the start of the name: 10091, 10091 another 3, 10091 side, 39903.4b",
-         re.compile(rf"^(?!{YEAR}(?:\D|$)){NUM}[a-z]?(?=$|[ _\-(,])", I), r"\1"),
+         re.compile(rf"^(?!{YEAR}(?:\D|$)){NUM}[a-z]?(?=$|[ _\-(,])", I), r"\1", images_only=False),
     Rule("museum accession number: 2006-12, 2006-12 side view, 2018-1 another 5",
-         re.compile(r"^((?:19[5-9]\d|20[0-2]\d)-\d{1,4})(?=$|[ _(,a-z])", I), r"\1"),
+         re.compile(r"^((?:19[5-9]\d|20[0-2]\d)-\d{1,4})(?=$|[ _(,a-z])", I), r"\1", images_only=False),
+    Rule("BNW catalogue number: BNW cat 12.3, BNW Cat. 7",
+         re.compile(r"^bnw[ _]cat\.?[ _]?(\d+(?:\.\d+)?)(?=$|[ _\-(,a-z])", I), r"bnw cat \1", images_only=False),
+    Rule("BNW number: BNW 1234",
+         re.compile(r"^bnw[ _](\d{2,6}(?:\.\d+)?)(?=$|[ _\-(,a-z])", I), r"bnw \1", images_only=False),
+    Rule("catalogue number: cat 12.3",
+         re.compile(r"^cat\.?[ _](\d+(?:\.\d+)?)(?=$|[ _\-(,a-z])", I), r"cat \1", images_only=False),
+    Rule("TAP database sketch: T 31415",
+         re.compile(r"^t[ _](\d{4,6})$", I), r"t \1", images_only=False),
+    Rule("TAP slide scan: TAP 85 Rol 25 #13 ..., TAP92 R12 NPW 34",
+         re.compile(r"^tap[ _]?(\d\d)[ _]?(?:rol|roll|r)[ _]?(\d+)[ _]+(?:(?:" + "|".join(SITE_WORDS) +
+                    r")[ _]+)?#?(\d+)(?=$|[ _\-,a-z])", I), r"tap\1 r\2 f\3", images_only=False),
+    Rule("Phu Lon slide scan: PL_R12_34, PL_L11_32",
+         re.compile(r"^pl_([a-z])(\d+)_(\d+)$", I), r"pl \1\2 f\3", images_only=False),
+    Rule("China slide: China 3 Box 2 Picture 14",
+         re.compile(r"^china (\d+) box (\d+) picture (\d+)", I), r"china \1 box \2 picture \3", images_only=False),
     Rule("object folder: files in '10091 NPW', '5273  NKH', '16115 NPW Done Cloud'",
-         re.compile(rf"^(?!{YEAR}\s){NUM}\s+{SITES}\b", I), r"\1", on="folder"),
+         re.compile(rf"^(?!{YEAR}\s){NUM}\s+{SITES}\b", I), r"\1", on="folder", images_only=False),
     Rule("same picture in another format: x.jpg / x.tif / x.psd",
          re.compile(r"^(.{6,})$", I), r"\1"),
 ]
+# the rules whose key is an object number (checked for numbers used at more than one site)
+OBJECT_RULES = {RULES[0].name, RULES[-2].name}
+
+
+def sites_named(name, folder=""):
+    """The site abbreviations written in a file's name and its folder's name, e.g.
+    '20952 NML Stone Adze.jpg' -> {'nml'}."""
+    words = set(re.findall(r"[a-z]+", split(name)[0] + " " + norm(folder)))
+    return words & set(SITE_WORDS)
 
 
 def norm(s):

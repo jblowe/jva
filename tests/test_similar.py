@@ -23,7 +23,11 @@ class Rules(unittest.TestCase):
         self.assertEqual(S.pass2_key("DSC_0575.JPG", "16115 NPW Done Cloud")[1], "16115")
         self.assertIsNone(S.pass2_key("DSCN2537.JPG", "2004 PL TAP 1")[1])          # a year, not an object
         self.assertNotEqual(S.pass2_key("1994 NML page 4.jpg", "x")[1], "1994")
-        self.assertIsNone(S.pass2_key("10091.doc", "x")[1])                         # images only, for now
+        self.assertEqual(S.pass2_key("7184 NPW contact sheet.pdf", "x")[1], "7184")     # documents too
+        for n, key in [("TAP 85 Rol 25 #13 Sq A.tif", "tap85 r25 f13"), ("TAP92 R12 NPW 34.tif", "tap92 r12 f34"),
+                       ("PL_L11_32.tif", "pl l11 f32"), ("BNW cat 12.3.jpg", "bnw cat 12.3"), ("T 31415", "t 31415")]:
+            self.assertEqual(S.pass2_key(n, "x")[1], key, n)
+        self.assertEqual(S.sites_named("20952 NML Stone Adze.jpg", "16115 NPW Done"), {"nml", "npw"})
 
     def test_group(self):
         items = [(1, "10091.JPG", "10091 NPW", "a/10091 NPW/10091.JPG"),
