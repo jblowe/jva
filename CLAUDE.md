@@ -51,8 +51,15 @@ code changes need `git pull && sudo systemctl restart jva` on the server.
 
 - Commit, never push: JB pushes himself. Commits are authored "John B. Lowe" and end with the
   Co-Authored-By / Claude-Session trailers. Don't rewrite or force-push history.
-- In cloud sessions the repo is worked on in a sandbox and delivered as a git bundle to
-  `~/Claude/Projects/Voelker/jva.bundle`; JB runs `git pull ~/Claude/Projects/Voelker/jva.bundle main`.
+- Work directly in `~/GitHub/jva` on JB's Mac (through the linked computer) and commit there. No
+  git bundles, no sandbox copies of the repo: the old `jva.bundle` hand-off is retired.
+- More than one conversation may work on the repo. So: run `git status` and `git log -3` before
+  starting and again just before committing; `git add` only the files you changed (never `git add
+  -A`, never commit someone else's uncommitted work); if HEAD moved under you, look at the new
+  commits before going on. Untracked scratch files at the top (notes, logs, redo.sh) are JB's.
+- git needs to delete its own .git lock files, so ask once per session for delete permission on
+  the repo folder (device_request_delete_permission) before the first commit; delete nothing else
+  with it.
 - Never open the live catalogue with SQLite from the linked-computer VM while JB's scripts may
   be using it (WAL -shm across systems caused a SIGBUS). Copy the file (`cp`) and work on the copy.
 - Ask before deleting anything from the archive; prefer lists for delete_files.py, reviewed by JB.
