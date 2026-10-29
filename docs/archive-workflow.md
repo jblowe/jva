@@ -35,6 +35,7 @@ In the repository:
 | `scripts/prepare_search.py`, `scripts/time_queries.py` | Helper tables that keep the search app fast, and a timer for its queries |
 | `scripts/date_report.py` | A spreadsheet (`creation_dates.xlsx`) of when the files were created, by year, for all files and for distinct files, with how many have creation = modification date. Uses the source drives' dates, since copies on the archive drives are dated by the copying. Needs `openpyxl` |
 | `scripts/word_report.py` | A spreadsheet (`word_documents.xlsx`) of the distinct Word documents and their page counts (Word's saved count; LibreOffice re-paginates those whose count can't be right). Needs `openpyxl` and `olefile` |
+| `scripts/find_documents.py`, `rules/searches/` | Find particular documents (the TAP catalogues, say) by what their title pages say, and copy them to a folder outside the archive (`~/jva_found`). See "Finding particular documents" |
 | `scripts/publish.py` | Puts the public part of the archive on the web server (see `docs/deployment.md`) |
 | `webapp/` | The search app: search and browse the catalogue in a web browser, with previews (see "Searching the archive" and `docs/search-app.md`) |
 | `jva/` | Code the scripts and the search app share: the catalogue's tables, drive checks, file kinds, TIFF repair, deletion, ... |
@@ -501,6 +502,48 @@ back exactly. Because the files' contents change, so do their checksums; the cat
 follows (copies, preview images, categories). Copies on drives that weren't plugged in can be
 repaired later by running both scripts again with that drive. Files listed as "not a TIFF"
 (mostly Photoshop files named `.tif`) are left alone.
+
+## Finding particular documents
+
+`scripts/find_documents.py` looks for documents you can describe by their title pages, such as
+the TAP small-finds catalogues and data-sheet volumes, and copies the ones you confirm to a folder
+outside the archive (`~/jva_found`, or `found_dir` in `config.json`). Each search is a CSV file in
+`rules/searches/`. `catalogs.csv` is the first: one row per catalogue, with its title page,
+and **keys** that tell it apart from its neighbours (volume number, Ttag range, year).
+
+    python3 scripts/find_documents.py --list               # the searches
+    python3 scripts/find_documents.py catalogs             # search -> ~/jva_found/catalogs.xlsx
+    python3 scripts/find_documents.py catalogs --collect   # copy the files marked Take -> ~/jva_found/catalogs/
+
+It reads each distinct file once, read only, from whichever drive holding a copy is plugged in:
+
+- **PDFs** of the search's `min_pages` or more: the text of pages 1-2 (`pdftotext`), or, for a
+  scan with no text, page 1 by OCR (Tesseract).
+- **Word and RTF documents**: the start of the text (macOS `textutil`, or the PDF copy
+  `make_derivatives.py` made of an old Mac Word file).
+- **Other files** (Publisher, InDesign, ...) only by name, when the name matches the search's
+  `names` pattern.
+
+What it read is kept in `document_text.sqlite` in the data folder, so a rerun, or a new search,
+only reads what is new. The first run reads every PDF and Word document and OCRs the scans, so
+it takes a while; `--max-minutes` stops it partway, and a rerun carries on.
+
+Each file's first pages, name and folders are compared with each title page. The score (0 to 1)
+is 0.6 times the share of the title's words found (numbers count double; longer words may have a
+typo or OCR slip) plus 0.4 times the share of the keys found. "NML", "NPW" and "NKH" in names
+count as the site names. The spreadsheet has:
+
+| Sheet | What it shows |
+|---|---|
+| Targets | The documents wanted, how many candidates each has, how many are marked Take |
+| Matches | The best candidates for each (`--top`, default 5): score, missing keys, the start of page 1, every location. **Take** is "yes" where every key was found and the score is 0.75 or more |
+| By name only | Files whose names match but whose text couldn't be read, with the likeliest target |
+| Other long PDFs | Long PDFs that matched nothing, largest first, with the start of page 1: other documents worth gathering |
+
+Check the Take marks and change any (yes, x, or blank). A rerun keeps your marks. `--collect` then
+copies each marked file to `~/jva_found/<search>/` as "<id> - <name>", writing `manifest.csv` with
+where each came from. Nothing in the archive changes. For a new search, copy `catalogs.csv`, give it
+a new name, and list the documents wanted.
 
 ## Searching the archive
 
