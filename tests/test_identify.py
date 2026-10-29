@@ -68,5 +68,28 @@ class Retry(unittest.TestCase):
         self.assertGreater(self.db.execute("SELECT COUNT(*) FROM files WHERE puid='fmt/43'").fetchone()[0], 0)
 
 
+class SystemFolder(unittest.TestCase):
+    def test_system_folder_is_clutter(self):
+        from jva.catalog import is_clutter
+        self.assertTrue(is_clutter("Finder", 10, "Bill Fitts/System Drive/System Folder/Finder"))
+        self.assertTrue(is_clutter("x.pdf", 10, "a/System Folder 9.2/Extensions/x.pdf"))
+        self.assertFalse(is_clutter("notes.doc", 10, "a/System Drive/Documents/notes.doc"))
+        self.assertFalse(is_clutter("x.doc", 10, "a/Filing System Folders/x.doc"))
+        root, config = H.make_archive()
+        sysf = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "OLD MAC" / "System Folder" / "Extensions"
+        sysf.mkdir(parents=True)
+        (sysf / "QuickTime").write_bytes(b"not content" * 10)
+        db = H.connect(config)
+        # a row catalogued before the rule existed
+        db.execute("INSERT INTO files(archive, unit, drive, path, name, ext, size, mtime, junk) VALUES "
+                   "('ARCH2', 'CumulativeArchive', 'X', 'CumulativeArchive/X/System Folder/Finder', 'Finder', '', 9, 0, 0)")
+        db.commit()
+        r = H.run_script("identify_archive", "-a", "ARCH1", "--skip-identify", config=config)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("System Folders now count as clutter", r.stderr)
+        self.assertEqual(db.execute("SELECT name, junk, unique_id FROM files WHERE path LIKE '%System Folder%' "
+                                    "ORDER BY name").fetchall(), [("Finder", 1, None), ("QuickTime", 1, None)])
+
+
 if __name__ == "__main__":
     unittest.main()

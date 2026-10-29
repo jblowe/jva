@@ -66,7 +66,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
-from jva.catalog import FILE_COLS, FILES as SCHEMA, gb, is_clutter, log, write_csv  # noqa: E402
+from jva.catalog import FILE_COLS, FILES as SCHEMA, gb, is_clutter, log, mark_clutter_folders, write_csv  # noqa: E402
 from jva.search_prep import prepare  # noqa: E402
 from jva.unique import build_unique  # noqa: E402
 from jva import volumes  # noqa: E402
@@ -106,6 +106,9 @@ def open_catalogue(outdir):
     n = db.execute("UPDATE files SET junk=1 WHERE junk=0 AND substr(name, 1, 1)='.'").rowcount
     if n:
         log(f"   {n:,} hidden dot-files (mostly Mac \"._\" files) now count as clutter")
+    n = mark_clutter_folders(db)
+    if n:
+        log(f"   {n:,} files in Mac OS System Folders now count as clutter")
     db.commit()
     return db
 
@@ -265,7 +268,7 @@ def scan(db, archive, root, sdirs):
             batch.append((archive, unit, drive_label(rel, sdirs), rel, name,
                           os.path.splitext(name)[1].lower(), st.st_size, st.st_mtime,
                           time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
-                          int(is_clutter(name, st.st_size) or
+                          int(is_clutter(name, st.st_size, rel) or
                               (rel in stubs and st.st_size <= STUB_MAX)), t, c, rs, created))
             n_new += 1
             if len(batch) >= 5000:
