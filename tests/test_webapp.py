@@ -41,7 +41,7 @@ class Local(unittest.TestCase):
 
     def test_search_and_facets(self):
         t = self.c.get("/search?q=burial").get_data(as_text=True)
-        self.assertIn("1 distinct file", t)
+        self.assertIn("1 result", t)
         t = self.c.get("/search").get_data(as_text=True)
         self.assertIn('name="site" value="npw"', t)
 
@@ -57,6 +57,68 @@ class Local(unittest.TestCase):
         r = self.c.get(f"/original/{self.key('notes.txt')}")
         self.assertEqual(r.status_code, 200)
         self.assertIn(b"field notes", r.data)
+
+
+class Versions(unittest.TestCase):
+    """Similar files (jva/similar.py) shown together, and on a file's page."""
+
+    @staticmethod
+    def archive():
+        root, config = H.make_archive()
+        d = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "THAI 2008"
+        for rel, data in [("10091 NPW/10091.JPG", b"\xff\xd8 front" * 30),
+                          ("10091 NPW/10091 another 3.JPG", b"\xff\xd8 back" * 30),
+                          ("10091 NPW/DSC_0575.JPG", b"\xff\xd8 detail" * 30),
+                          ("old/10091.JPG", b"\xff\xd8 front, older edit" * 30)]:
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            (d / rel).write_bytes(data)
+        r = H.run_script("identify_archive", "-a", "ARCH1", "--skip-identify", config=config)
+        assert r.returncode == 0, r.stderr
+        return root, config
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root, cls.config = cls.archive()
+        cls.A = load_app(cls.config)
+        cls.c = cls.A.app.test_client()
+        cls.db = H.connect(cls.config)
+
+    def test_grouped_in_the_catalogue(self):
+        rows = self.db.execute("SELECT name, group_how, group_key FROM unique_files WHERE group_key = '10091' "
+                               "ORDER BY name").fetchall()
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(self.db.execute("SELECT label, members FROM file_groups").fetchall(), [("10091", 4)])
+
+    def test_search_together_and_apart(self):
+        t = self.c.get("/search?q=10091").get_data(as_text=True)
+        self.assertIn("1 result", t)
+        self.assertIn("4 versions", t)
+        t = self.c.get("/search?q=10091&similar=apart").get_data(as_text=True)
+        self.assertIn("4 distinct files", t)          # DSC_0575 matches through its folder
+        all_together = self.c.get("/search").get_data(as_text=True)
+        all_apart = self.c.get("/search?similar=apart").get_data(as_text=True)
+        self.assertIn("9 results", all_together)      # 8 + 4 versions - 3
+        self.assertIn("12 distinct files", all_apart)
+
+    def test_file_page(self):
+        sha = self.db.execute("SELECT sha256 FROM unique_files WHERE path LIKE '%10091 NPW/10091.JPG'").fetchone()[0]
+        t = self.c.get(f"/file/{sha}").get_data(as_text=True)
+        self.assertIn("Other versions", t)
+        self.assertEqual(t.count('class="rel-same"'), 1)        # old/10091.JPG: same name
+        self.assertEqual(t.count('class="rel-similar"'), 2)     # another 3, DSC_0575
+        self.assertIn("object folder", t)
+
+    def test_deleting_the_main_file_keeps_the_group(self):
+        from jva import deletion as D
+        root, config = self.archive()                 # its own copy: this test deletes files
+        con = H.connect(config)
+        main = con.execute("SELECT group_id FROM file_groups").fetchone()[0]
+        D.delete_unique(con, main, "test", "test", str(root / "Volumes"))
+        con.commit()
+        g = con.execute("SELECT group_id, members FROM file_groups").fetchone()
+        self.assertNotEqual(g[0], main)
+        self.assertEqual(g[1], 3)
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM unique_files WHERE group_id = ?", (g[0],)).fetchone()[0], 3)
 
 
 class Public(unittest.TestCase):

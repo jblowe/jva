@@ -16,6 +16,8 @@
   --c-class: #4b5f9e;
   --c-other: #7b8486;
   --c-unc: #a7b0ae;
+  --rel-same: #2f7f70;        /* identical: same content, or same name */
+  --rel-similar: #b0622a;     /* similar: another version of the same thing (cuprite) */
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --sans: "Avenir Next", Avenir, "Segoe UI", system-ui, -apple-system, sans-serif;
   color-scheme: light dark;
@@ -26,6 +28,7 @@
     --line: #2f3c3e; --accent: #5db3a0; --accent-ink: #0f1a17; --window: #0c1112;
     --c-tap: #5db3a0; --c-sea: #5aa7cc; --c-oarch: #d1a052; --c-museum: #c08dbd;
     --c-class: #8fa3e0; --c-other: #9aa4a6; --c-unc: #5f6b69;
+    --rel-same: #5db3a0; --rel-similar: #e0915a;
   }
 }
 * { box-sizing: border-box; }
@@ -175,3 +178,15 @@ button.delete { color: #a33a2a; }
   .copies { overflow-x: auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* identical copies and similar versions on a file's page */
+.rel-identical td:first-child, .rel-same td:first-child { box-shadow: inset 4px 0 0 var(--rel-same); }
+.rel-similar td:first-child { box-shadow: inset 4px 0 0 var(--rel-similar); }
+.rel-similar td:first-child { padding-left: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 10px; font-size: 13px; color: var(--muted); }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.sw-same { background: var(--rel-same); } .sw-similar { background: var(--rel-similar); }
+.why { font-size: 12.5px; }
+.why .key { font-weight: 600; color: var(--ink); }
+.versions { color: var(--rel-similar); font-weight: 600; }
+.group-note { margin: 2px 0 12px; color: var(--muted); }

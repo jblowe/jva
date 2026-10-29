@@ -25,37 +25,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
-from jva.catalog import columns, connect, log  # noqa: E402
+from jva.catalog import connect, log  # noqa: E402
 from jva import similar as S  # noqa: E402
 
 TOP = 1000      # rows in the group listings
 
 
-def load(db):
-    """-> {uid: dict(name, kind, ext, size, category, location, folders)}; folders = the last
-    folder of every copy (any of them can be an object folder)."""
-    info = {}
-    kind = "COALESCE(kind,'')" if "kind" in columns(db, "unique_files") else "''"
-    for uid, name, kind, ext, size, cat, archive, path in db.execute(
-            f"SELECT id, name, {kind}, lower(ext), size_bytes, COALESCE(category,'Unclassified'), "
-            "archive, path FROM unique_files"):
-        info[uid] = {"name": name, "kind": kind, "ext": ext, "size": size or 0, "category": cat,
-                     "location": f"{archive}: {path}", "path": path, "folders": set()}
-    for uid, path in db.execute("SELECT unique_id, path FROM files WHERE unique_id IS NOT NULL AND junk = 0"):
-        if uid in info:
-            parts = path.rsplit("/", 2)
-            info[uid]["folders"].add(parts[-2] if len(parts) > 1 else "")
-    return info
-
-
-def folder_for(d):
-    """The folder pass 2 looks at: one that names an object, if any copy is in one."""
-    rx = next(r for r in S.RULES if r.on == "folder")
-    return next((f for f in sorted(d["folders"]) if rx.match(S.norm(f))), sorted(d["folders"])[0] if d["folders"] else "")
-
-
 def analyse(info):
-    items = [(uid, d["name"], folder_for(d), d["path"]) for uid, d in info.items()]
+    items = [(uid, d["name"], d["folder"], d["path"]) for uid, d in info.items()]
     t0 = time.time()
     res, labels = S.group(items)
     log(f"grouped {len(items):,} distinct files in {time.time() - t0:.0f}s")
@@ -223,7 +200,7 @@ def write(path, info, res, labels, p1, groups):
     # ---- Site check: object numbers written with more than one site
     by_obj = defaultdict(lambda: defaultdict(list))
     for uid, d in info.items():
-        folder = folder_for(d)
+        folder = d["folder"]
         r, k = S.pass2_key(d["name"], folder, path=d["path"])
         if r and r.name in S.OBJECT_RULES:
             for site in S.sites_named(d["name"], folder) or {"(none)"}:
@@ -271,7 +248,7 @@ def main():
         sys.exit("This needs openpyxl:  python3 -m pip install openpyxl")
     out = Path(a.output).expanduser() if a.output else CONFIG.data_dir / "similar_files.xlsx"
     db = connect(a.catalogue, readonly=True)
-    info = load(db)
+    info = S.catalogue_items(db)
     db.close()
     res, labels, p1, groups = analyse(info)
     write(out, info, res, labels, p1, groups)

@@ -73,8 +73,11 @@ NUM = r"(\d{4,6}(?:\.\d{1,2})?)"            # catalogue numbers: 10091, 39903.4
 YEAR = r"(?:19[5-9]\d|20[0-2]\d)"           # 4-digit numbers that are much more often years
 SITE_WORDS = ("npw", "nml", "nkh", "tk", "pl", "pf", "bnw", "ktw")
 RULES = [
+    # a letter after the number is part of it (18536e is one piece of lot 18536); a number
+    # followed by "_17" or "-3" is a date or event code (1404_17_Celebration_046.jpg), not an object
     Rule("object number at the start of the name: 10091, 10091 another 3, 10091 side, 39903.4b",
-         re.compile(rf"^(?!{YEAR}(?:\D|$)){NUM}[a-z]?(?=$|[ _\-(,])", I), r"\1", images_only=False),
+         re.compile(rf"^(?!{YEAR}(?:\D|$))(\d{{4,6}}(?:\.\d{{1,2}})?[a-z]?)(?=$|[ (,]|[_\-](?!\d))", I), r"\1",
+         images_only=False),
     Rule("museum accession number: 2006-12, 2006-12 side view, 2018-1 another 5",
          re.compile(r"^((?:19[5-9]\d|20[0-2]\d)-\d{1,4})(?=$|[ _(,a-z])", I), r"\1", images_only=False),
     Rule("BNW catalogue number: BNW cat 12.3, BNW Cat. 7",
@@ -219,3 +222,112 @@ def group(items, rules=RULES):
     labels = {g: (keys[g].most_common(1)[0][0] if keys[g] else names[g].most_common(1)[0][0])
               for g in names}
     return out, labels
+
+
+# ---------- in the catalogue ----------
+
+FILE_GROUPS = """
+DROP TABLE IF EXISTS file_groups;
+CREATE TABLE file_groups(
+  group_id INTEGER PRIMARY KEY,     -- = unique_files.id of the group's main file
+  label TEXT,                       -- what the group is: "10091", "tap85 r25 f13", or the shared name
+  members INTEGER,                  -- distinct files in the group
+  same_name INTEGER,                -- of them, grouped by identical name (pass 1)
+  similar INTEGER);                 -- of them, grouped by a pass-2 rule
+"""
+GROUP_COLUMNS = (("group_id", "INTEGER"), ("group_how", "TEXT"), ("group_key", "TEXT"))
+
+
+def catalogue_items(db):
+    """Every distinct file as a dict: uid, name, path, archive, location, ext, size, category,
+    kind, and folders (the last folder of every copy, since any copy can be in an object
+    folder) and folder (the one pass 2 looks at: an object folder if any copy is in one)."""
+    cols = {r[1] for r in db.execute("PRAGMA table_info(unique_files)")}
+    kind = "COALESCE(kind, '')" if "kind" in cols else "''"
+    info = {}
+    for uid, name, kd, ext, mime, mtype, mcreator, size, cat, archive, path in db.execute(
+            f"SELECT id, name, {kind}, lower(ext), mime, mac_type, mac_creator, size_bytes, "
+            "COALESCE(category, 'Unclassified'), archive, path FROM unique_files"):
+        if not kd:
+            from jva.kinds import kind_of
+            kd = kind_of(ext, mime, mtype, mcreator)
+        info[uid] = {"uid": uid, "name": name, "kind": kd, "ext": ext, "size": size or 0, "category": cat,
+                     "archive": archive, "path": path, "location": f"{archive}: {path}", "folders": set()}
+    for uid, path in db.execute("SELECT unique_id, path FROM files WHERE unique_id IS NOT NULL AND junk = 0"):
+        if uid in info:
+            info[uid]["folders"].add(path.rsplit("/", 2)[-2] if "/" in path else "")
+    folder_rule = next(r for r in RULES if r.on == "folder")
+    for d in info.values():
+        fs = sorted(d["folders"])
+        d["folder"] = next((f for f in fs if folder_rule.match(norm(f))), fs[0] if fs else "")
+    return info
+
+
+def main_file(members, label):
+    """The file that stands for a group: a picture over anything else, then one whose name is
+    just the group's label (10091.JPG), then the shortest name."""
+    return min(members, key=lambda d: (d["kind"] != "Image", split(d["name"])[0] != label,
+                                       len(d["name"]), d["uid"]))
+
+
+def build_groups(db, rules=RULES, log=lambda msg: None):
+    """(Re)compute the groups for the whole catalogue: fills unique_files.group_id/how/key and
+    the file_groups table. Called after unique_files is rebuilt and by publish.py."""
+    import time
+    t0 = time.time()
+    cols = {r[1] for r in db.execute("PRAGMA table_info(unique_files)")}
+    for c, typ in GROUP_COLUMNS:
+        if c not in cols:
+            db.execute(f"ALTER TABLE unique_files ADD COLUMN {c} {typ}")
+    info = catalogue_items(db)
+    res, labels = group([(d["uid"], d["name"], d["folder"], d["path"]) for d in info.values()], rules)
+    members = defaultdict(list)
+    for uid, (g, how, key) in res.items():
+        members[g].append(info[uid])
+    updates, groups = [], []
+    for g, ms in members.items():
+        main = main_file(ms, labels[g]) if len(ms) > 1 else ms[0]
+        hows = Counter(res[d["uid"]][1] for d in ms)
+        if len(ms) > 1:
+            groups.append((main["uid"], labels[g], len(ms), hows.get("same name", 0),
+                           len(ms) - hows.get("same name", 0) - hows.get("", 0)))
+        for d in ms:
+            _, how, key = res[d["uid"]]
+            updates.append((main["uid"], how if len(ms) > 1 else "", key if len(ms) > 1 else "", d["uid"]))
+    db.executemany("UPDATE unique_files SET group_id = ?, group_how = ?, group_key = ? WHERE id = ?", updates)
+    db.executescript(FILE_GROUPS)
+    db.executemany("INSERT INTO file_groups VALUES (?, ?, ?, ?, ?)", groups)
+    db.execute("CREATE INDEX IF NOT EXISTS i_u_group ON unique_files(group_id)")
+    db.commit()
+    log(f"   similar files: {len(info):,} distinct files in {len(members):,} groups "
+        f"({len(groups):,} of two or more), {time.time() - t0:.0f}s")
+    return len(members)
+
+
+def leave_group(db, uid):
+    """Before distinct file uid is removed from unique_files: if it is its group's main file,
+    hand the group to another member, and keep the group's counts right."""
+    cols = {r[1] for r in db.execute("PRAGMA table_info(unique_files)")}
+    if "group_id" not in cols:
+        return
+    r = db.execute("SELECT group_id, group_how FROM unique_files WHERE id = ?", (uid,)).fetchone()
+    if not r or r[0] is None:
+        return
+    g, how = r
+    rest = [x for (x,) in db.execute("SELECT id FROM unique_files WHERE group_id = ? AND id <> ? ORDER BY id",
+                                     (g, uid))]
+    has_table = db.execute("SELECT 1 FROM sqlite_master WHERE name = 'file_groups'").fetchone()
+    if g == uid and rest:
+        db.execute("UPDATE unique_files SET group_id = ? WHERE group_id = ?", (rest[0], uid))
+        if has_table:
+            db.execute("UPDATE file_groups SET group_id = ? WHERE group_id = ?", (rest[0], uid))
+        g = rest[0]
+    if has_table:
+        if len(rest) <= 1:
+            db.execute("DELETE FROM file_groups WHERE group_id = ?", (g,))
+            db.execute("UPDATE unique_files SET group_how = '', group_key = '' WHERE id IN (?, ?)",
+                       (g, rest[0] if rest else g))
+        else:
+            db.execute("UPDATE file_groups SET members = members - 1, same_name = same_name - ?, "
+                       "similar = similar - ? WHERE group_id = ?",
+                       (1 if how == "same name" else 0, 1 if how and how != "same name" else 0, g))

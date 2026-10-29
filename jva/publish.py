@@ -68,6 +68,10 @@ def build_public(src, out_dir, exclude, derivatives_dir, step=lambda msg: None):
             d.execute("UPDATE archives SET uuid = ''")
     step(f"left out {counts['excluded']:,} distinct files in {', '.join(exclude) or 'no categories'}, and the clutter")
 
+    from jva.similar import build_groups           # regroup what is left
+    build_groups(d)
+    step("grouped similar files")
+
     files = check_derivatives(d, derivatives_dir, counts)
     step(f"checked the derivatives: {len(files):,} files to publish, "
          f"{counts['missing_previews']:,} previews missing")

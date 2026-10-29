@@ -238,6 +238,21 @@ archive drive needed), and `--skip-identify` to skip step 3.
   source drives / archive drives hold a copy), `archive`, `path` and `folder` of the
   representative copy, **`locations`** (every copy as *archive drive: path*), `drive_list`,
   `sha256`, and `checksum` (`checksummed`, `not yet checksummed` or `unreadable`).
+- **Similar files** (`unique_files.group_id`, `group_how`, `group_key`, and the `file_groups`
+  table): a second level of grouping, rebuilt with `unique_files`. Distinct files that are
+  versions of the same thing share a `group_id` (the id of the group's main file):
+  - *same name*: identical file names, except names a camera, scanner or program makes up
+    (`IMG_0001.JPG`, `DSC_0090.JPG`, `Scan 3.jpg`, `001.jpg`, `sld003.htm` ...) and the parts
+    of saved web pages, Keynote documents and applications;
+  - *same object*: rules that read an object from the name or folder: `10091`,
+    `10091 another 3`, `20952 NML Stone Adze`, files in a folder `10091 NPW`, `2006-12 side view`,
+    `BNW cat 12.3`, `T 31415`, TAP and Phu Lon slide scans (season, roll and frame), and the
+    same picture saved in another format.
+  The rules and the list of made-up names are in `jva/similar.py`, the only place they live.
+  To try out a change without touching the catalogue, run `python3 scripts/similar_report.py`:
+  it writes `similar_files.xlsx` (the groups, what was refused, the widest groups to check, a
+  check for object numbers written with two different sites, and the commonest names still
+  on their own). Then `python3 scripts/identify_archive.py --reports` applies it.
 - **`unique_search`**: a full-text index over `unique_files` (names, other names, folders,
   locations, format, extension), for fast word searches.
 - **`unique_archives`**, **`unique_drives`**, `unique_files.kind` and `search_meta`: helper

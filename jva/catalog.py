@@ -8,6 +8,7 @@ Tables, and which script fills them:
   removed_copies           free_space.py         extra copies removed to save space
   deleted_files            delete_files.py, the search app   files deleted on purpose
   tiff_repairs             repair_tiffs.py       bytes changed in damaged TIFFs (for --undo)
+  file_groups              jva/similar.py (with unique_files)   similar files grouped together
   unique_archives, unique_drives, unique_tags, search_meta, unique_files.kind
                            prepare_search.py (jva.search_prep)   for a fast search app
 """
@@ -64,7 +65,10 @@ CREATE TABLE unique_files(
   locations TEXT,                   -- every copy as "archive: path", "; "-separated (first 100)
   drive_list TEXT,                  -- "archive: drive" for each drive holding a copy
   checksum TEXT,                    -- checksummed | not yet checksummed | unreadable
-  category TEXT                     -- from classify_archive.py: TAP, Class, ... (if run)
+  category TEXT,                    -- from classify_archive.py: TAP, Class, ... (if run)
+  group_id INTEGER,                 -- jva/similar.py: the id of the group's main file (itself if alone)
+  group_how TEXT,                   -- why it is in that group: "same name", a rule's name, or ""
+  group_key TEXT                    -- the object (etc.) the rule found, e.g. "10091"
 );
 """
 UNIQUE_INDEXES = """

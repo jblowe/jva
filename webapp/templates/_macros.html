@@ -10,6 +10,7 @@
       {%- if r.sites %}<span class="site">{{ r.sites }}</span>{% endif -%}
       {%- if r.seasons %}<span class="season" title="Season">’{{ r.seasons|replace(", ", ", ’") }}</span>{% endif -%}
       {%- if r.copies is defined and r.copies and r.copies > 1 %}<span class="copies" title="{{ r.copies }} identical copies">×{{ r.copies }}</span>{% endif -%}
+      {%- if r.versions is defined and r.versions and r.versions > 1 %}<span class="versions" title="{{ r.versions }} versions of {{ r.group_label }}">{{ r.versions }} versions</span>{% endif -%}
     </span>
     {% if show_cat %}<span class="cat cat-{{ r.category|replace(' ', '-')|lower }}">{{ r.category }}</span>{% endif %}
   </span>

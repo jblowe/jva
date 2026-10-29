@@ -43,11 +43,13 @@
 
 <section class="copies">
   <h2>Where it is</h2>
+  {% if group %}<p class="legend"><span><span class="sw sw-same"></span>identical: this file's copies, and files with the same name</span>
+    <span><span class="sw sw-similar"></span>similar: other versions of {{ group.label }}</span></p>{% endif %}
   <table class="list">
     <thead><tr><th>Archive drive</th><th>Source drive</th><th>Path</th><th>Modified</th>{% if CFG.mode == 'local' %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for c in copies %}
-      <tr>
+      <tr class="rel-identical">
         <td>{{ c.archive }}</td>
         <td>{{ c.drive }}</td>
         <td class="path">{{ c.path }}</td>
@@ -72,6 +74,27 @@
       data-what="{{ 'this file' if copies|length == 1 else 'all ' ~ copies|length ~ ' copies of this file' }}">Delete {{ "this file" if copies|length == 1 else "all " ~ copies|length ~ " copies" }}</button>{% endif %}</p>
   {% endif %}
   <p class="status" role="status" aria-live="polite"></p>
+
+  {% if group %}
+  <h3>Other versions <span class="muted">— {{ group.count - 1 }} other file{{ "" if group.count == 2 else "s" }} in the group “{{ group.label }}”</span></h3>
+  <table class="list versions-table">
+    <thead><tr><th></th><th>Name</th><th>Where (one copy)</th><th class="r">Copies</th><th>Why it is here</th></tr></thead>
+    <tbody>
+    {% for m in group.members %}{% set mkey = m.sha256 or ('u' ~ m.id) %}
+      <tr class="{{ 'rel-same' if m.same_name else 'rel-similar' }}">
+        <td class="tiny"><img loading="lazy" src="{{ img_src(m) }}" alt=""></td>
+        <td><a href="{{ url_for('file_page', key=mkey) }}">{{ m.name }}</a></td>
+        <td class="path">{{ m.archive }}: {{ m.path }}</td>
+        <td class="r">{{ m.copies }}</td>
+        <td class="why">{% if m.same_name %}same name, different content
+          {% elif m.group_how == 'same name' %}same name as another version
+          {% else %}{{ m.group_how|rule_label }}{% if m.group_key %}: <span class="key">{{ m.group_key }}</span>{% endif %}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if group.members|length < group.count - 1 %}<p class="muted">The first {{ group.members|length }} are shown.</p>{% endif %}
+  {% endif %}
 
   {% if removed %}
   <h3>Formerly also at</h3>

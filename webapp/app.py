@@ -111,6 +111,25 @@ def is_prepared():
     return prepared(catalogue_stamp())
 
 
+@functools.lru_cache(maxsize=4)
+def _grouped(_stamp):
+    """True when the catalogue has the groups of similar files (jva/similar.py)."""
+    with app.app_context():
+        return has_table("file_groups") and "group_id" in {r[1] for r in db().execute("PRAGMA table_info(unique_files)")}
+
+
+def grouped():
+    return _grouped(catalogue_stamp())
+
+
+def rule_label(how):
+    """'object number at the start of the name: 10091, ...' -> 'object number at the start of the name'"""
+    return (how or "").split(":")[0]
+
+
+app.jinja_env.filters["rule_label"] = rule_label
+
+
 def kind_sql():
     return "u.kind" if is_prepared() else "kind(u.ext, u.mime, u.mac_type, u.mac_creator)"
 
@@ -331,16 +350,31 @@ def search():
     view = request.args.get("view", "grid")
     page = max(1, request.args.get("page", 1, type=int))
     size = CFG["page_size"]
+    # similar files together (one entry per group, shown by its main file), or one by one
+    together = grouped() and request.args.get("similar") != "apart"
 
     frm, where, params = build(q, filters)
+    cols = f"""u.id, u.sha256, u.name, u.other_names, u.ext, u.mime, u.mac_type, u.size_bytes,
+               u.modified, u.copies, u.folder, COALESCE(u.category,'Unclassified') category,
+               {kind_sql()} kind"""
     try:
-        total = db().execute(f"SELECT COUNT(*) FROM {frm}{where}", params).fetchone()[0]
-        rows = db().execute(
-            f"""SELECT u.id, u.sha256, u.name, u.other_names, u.ext, u.mime, u.mac_type, u.size_bytes,
-                       u.modified, u.copies, u.folder, COALESCE(u.category,'Unclassified') category,
-                       {kind_sql()} kind
-                FROM {frm}{where} ORDER BY {order_by(sort, direction)} LIMIT ? OFFSET ?""",
-            params + [size, (page - 1) * size]).fetchall()
+        if together:
+            total = db().execute(f"SELECT COUNT(DISTINCT COALESCE(u.group_id, u.id)) FROM {frm}{where}",
+                                 params).fetchone()[0]
+            rank = "MIN(s.rank)" if "unique_search" in frm else "0"
+            rows = db().execute(
+                f"""SELECT {cols}, g.members versions, g.label group_label, m.n matched
+                    FROM (SELECT COALESCE(u.group_id, u.id) gid, {rank} r, COUNT(*) n
+                          FROM {frm}{where} GROUP BY 1) m
+                    JOIN unique_files u ON u.id = m.gid
+                    LEFT JOIN file_groups g ON g.group_id = u.id
+                    ORDER BY {order_by(sort, direction).replace("s.rank", "m.r")} LIMIT ? OFFSET ?""",
+                params + [size, (page - 1) * size]).fetchall()
+        else:
+            total = db().execute(f"SELECT COUNT(*) FROM {frm}{where}", params).fetchone()[0]
+            rows = db().execute(
+                f"SELECT {cols} FROM {frm}{where} ORDER BY {order_by(sort, direction)} LIMIT ? OFFSET ?",
+                params + [size, (page - 1) * size]).fetchall()
         tags = tags_for([r["id"] for r in rows])
         rows = [dict(r, sites=tags[r["id"]]["site"], seasons=tags[r["id"]]["season"]) for r in rows]
         facets = facet_counts(q, tuple(sorted(filters.items())), catalogue_stamp())
@@ -351,7 +385,7 @@ def search():
              if (k != "relevance" or q) and (k not in ("site", "season") or is_prepared())}
     return render_template("search.html", q=q, filters=filters, sort=sort, sorts=sorts, direction=direction,
                            view=view, page=page, pages=max(1, -(-total // size)), total=total,
-                           rows=rows, facets=facets, error=error)
+                           rows=rows, facets=facets, error=error, together=together, can_group=grouped())
 
 
 # ---------- one file and its copies ----------
@@ -404,13 +438,29 @@ def file_page(key):
            ORDER BY f.path LIMIT 48""",
         (u["archive"], lo, (folder + "0") if folder else "￿", len(lo) + 1, u["path"])).fetchall()
     vols = {c["archive"]: mounted(c["archive"]) for c in copies}
+    group = None
+    if grouped() and u["group_id"] is not None:
+        g = con.execute("SELECT * FROM file_groups WHERE group_id = ?", (u["group_id"],)).fetchone()
+        if g is not None:
+            me = (u["name"] or "").casefold()
+            members = []
+            for m in con.execute("""SELECT id, sha256, name, ext, mime, mac_type, mac_creator, archive, path,
+                                           copies, group_how, group_key, COALESCE(category, 'Unclassified') category
+                                    FROM unique_files WHERE group_id = ? AND id <> ?
+                                    ORDER BY lower(name) <> ?, name COLLATE NOCASE LIMIT 500""",
+                                 (u["group_id"], u["id"], me)):
+                m = dict(m)
+                m["same_name"] = (m["name"] or "").casefold() == me
+                members.append(m)
+            group = {"label": g["label"], "members": members, "count": g["members"],
+                     "main": g["group_id"] == u["id"]}
     orig = None
     if serves_originals():
         full, _ = original_copy(u)
         if full is not None:
             orig = {"inline": original_type(u) in INLINE_TYPES}
     return render_template("file.html", u=u, copies=copies, why=why, by_copy=by_copy, removed=removed,
-                           deriv=deriv, neighbours=neighbours, vols=vols, folder=folder, orig=orig,
+                           deriv=deriv, neighbours=neighbours, vols=vols, folder=folder, orig=orig, group=group,
                            kind=kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"]))
 
 

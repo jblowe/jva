@@ -3,6 +3,7 @@
 build_unique() rebuilds the whole table (identify_archive.py, after every run);
 refresh_unique() brings one distinct file up to date after some of its copies were deleted
 or changed (delete_files.py, the search app). Both describe a file the same way (summary()).
+build_unique() then groups similar files (jva/similar.py: build_groups).
 """
 import os
 import sqlite3
@@ -98,6 +99,8 @@ def build_unique(db, max_locations=MAX_LOCATIONS):
     n_files = db.execute("SELECT COUNT(*) FROM files WHERE junk=0").fetchone()[0]
     log(f"   unique_files: {uid:,} distinct files (from {n_files:,} non-clutter files) {fts}, "
         f"{time.time() - t0:.0f}s")
+    from jva.similar import build_groups          # second level: similar files together
+    build_groups(db, log=log)
     return uid
 
 
@@ -120,6 +123,8 @@ def refresh_unique(db, uid, drop_derivative=None):
         if has_table(db, t):
             db.execute(f"DELETE FROM {t} WHERE unique_id=?", (uid,))
     if not copies:                                           # last copy gone
+        from jva.similar import leave_group
+        leave_group(db, uid)
         db.execute("DELETE FROM unique_files WHERE id=?", (uid,))
         if sha:
             if has_table(db, "content_class"):

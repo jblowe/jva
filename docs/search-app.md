@@ -47,7 +47,12 @@ python3 scripts/time_queries.py --cat TAP --q anvil
 ## What it shows
 
 - **All files**: one entry per distinct file (the `unique_files` table), so a photo kept on
-  five drives appears once, marked "5 copies". Search matches words in names and folder paths.
+  five drives appears once, marked "5 copies". Versions of the same thing -- files with the
+  same name, or the same object number (see "Similar files" in `archive-workflow.md`) -- are
+  shown together as one entry, marked "12 versions", by the group's main file (a picture,
+  preferably one named just `10091.JPG`). **Versions together / One by one** above the results
+  switches between that and every distinct file on its own. The filter counts on the left
+  always count distinct files. Search matches words in names and folder paths.
   Words are matched as prefixes (`anvil` finds "Anvils"), and `"quoted phrases"` must appear
   together. Filters on the left narrow by site, season, category, kind, archive drive, source
   drive, copies and whether a preview exists. Results can be shown as slides or as a list,
@@ -61,6 +66,9 @@ python3 scripts/time_queries.py --cat TAP --q anvil
 - **A file's page**: the preview, its facts (format, size, dates, checksum), why it got its
   category, and every copy (from the `files` table) with **Reveal in Finder** and **Copy path**.
   It also lists copies that `free_space.py` removed and other files in the same folder.
+  Under **Where it is**, **Other versions** lists the rest of the file's group, coloured:
+  green for identical (this file's own copies, and other files with the same name), copper
+  for similar (other versions of the same object), with the reason each one is there.
   **Open** / **Download** under the preview fetch the original file itself from whichever
   archive drive with a copy is plugged in (PDFs, pictures and plain text open in the browser;
   everything else downloads). Old Word files also get **Open PDF** / **Download RTF**: whole-

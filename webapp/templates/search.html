@@ -7,6 +7,7 @@
   <input type="hidden" name="view" value="{{ view }}">
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ direction }}">
+  {% if not together and can_group %}<input type="hidden" name="similar" value="apart">{% endif %}
   <aside class="rail">
     {% set site_labels = {} %}
     {% for s in SITES %}{% set _ = site_labels.update({s: s|upper}) %}{% endfor %}
@@ -26,7 +27,7 @@
       <p class="count">
         {% if error %}{{ error }}
         {% elif total == 0 %}Nothing matches{% if q %} “{{ q }}”{% endif %}. Try fewer words, or clear a filter.
-        {% else %}{{ "{:,}".format(total) }} distinct file{{ "" if total == 1 else "s" }}{% if q %} matching “{{ q }}”{% endif %}{% endif %}
+        {% else %}{{ "{:,}".format(total) }} {% if together %}result{{ "" if total == 1 else "s" }}{% else %}distinct file{{ "" if total == 1 else "s" }}{% endif %}{% if q %} matching “{{ q }}”{% endif %}{% endif %}
       </p>
       <div class="controls">
         <label>Sort by
@@ -40,6 +41,10 @@
           <a href="{{ url_for('search', **dict(a, view='grid', page=1)) }}" {% if view == 'grid' %}aria-current="true"{% endif %}>Slides</a>
           <a href="{{ url_for('search', **dict(a, view='list', page=1)) }}" {% if view == 'list' %}aria-current="true"{% endif %}>List</a>
         </span>
+        {% if can_group %}<span class="viewswitch" title="Versions of the same thing (same name, or the same object number) shown as one entry, or each on its own">
+          <a href="{{ url_for('search', **dict(a, similar='together', page=1)) }}" {% if together %}aria-current="true"{% endif %}>Versions together</a>
+          <a href="{{ url_for('search', **dict(a, similar='apart', page=1)) }}" {% if not together %}aria-current="true"{% endif %}>One by one</a>
+        </span>{% endif %}
       </div>
     </div>
 
@@ -60,7 +65,7 @@
       {% for r in rows %}{% set key = r.sha256 or ('u' ~ r.id) %}
         <tr>
           <td class="tiny"><img loading="lazy" src="{{ img_src(r) }}" alt=""></td>
-          <td><a href="{{ url_for('file_page', key=key) }}">{{ r.name }}</a>{% if r.other_names %}<div class="aka">also {{ r.other_names }}</div>{% endif %}</td>
+          <td><a href="{{ url_for('file_page', key=key) }}">{{ r.name }}</a>{% if r.versions and r.versions > 1 %} <span class="versions" title="versions of {{ r.group_label }}">{{ r.versions }} versions</span>{% endif %}{% if r.other_names %}<div class="aka">also {{ r.other_names }}</div>{% endif %}</td>
           <td>{{ r.sites }}</td>
           <td>{{ r.seasons }}</td>
           <td class="path">{{ r.folder }}</td>
