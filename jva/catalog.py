@@ -13,6 +13,7 @@ Tables, and which script fills them:
                            prepare_search.py (jva.search_prep)   for a fast search app
 """
 import csv
+import os
 import re
 import sqlite3
 import sys
@@ -147,15 +148,18 @@ JUNK_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini", "Icon\r", ".localized", "
 # Folders whose whole contents are clutter: the classic Mac OS "System Folder" (also
 # "System Folder 9.2", "System Folder (old)", "System Folder copy", ...)
 CLUTTER_FOLDERS = re.compile(r"(^|/)System Folder(?: [^/]*)?/", re.I)
+# File types whose files are all clutter: .m4a audio (iTunes music, students' recordings)
+CLUTTER_EXT = {".m4a"}
 
 
 def is_clutter(name, size, path=""):
     """Catalogued, but never treated as content: system files, empty files, every hidden
-    dot-file -- above all the "._" AppleDouble files exFAT drives keep next to Mac files -- and
-    everything in a CLUTTER_FOLDERS folder. A "._" file holds the Mac type/creator codes and
+    dot-file -- above all the "._" AppleDouble files exFAT drives keep next to Mac files --
+    everything in a CLUTTER_FOLDERS folder, and files of a CLUTTER_EXT type. A "._" file holds the Mac type/creator codes and
     resource fork of the file it sits beside; the scan reads those into that file's own row
     (mac_type, mac_creator, rsrc_bytes)."""
-    return name in JUNK_NAMES or size == 0 or name.startswith(".") or bool(CLUTTER_FOLDERS.search(path))
+    return (name in JUNK_NAMES or size == 0 or name.startswith(".") or bool(CLUTTER_FOLDERS.search(path))
+            or os.path.splitext(name)[1].lower() in CLUTTER_EXT)
 
 
 def mark_clutter_folders(db):
@@ -164,6 +168,13 @@ def mark_clutter_folders(db):
     ids = [(i,) for i, p in rows if CLUTTER_FOLDERS.search(p)]
     db.executemany("UPDATE files SET junk = 1 WHERE id = ?", ids)
     return len(ids)
+
+
+def mark_clutter_types(db):
+    """Mark files already catalogued with a CLUTTER_EXT type as clutter. -> how many."""
+    marks = ", ".join("?" * len(CLUTTER_EXT))
+    return db.execute(f"UPDATE files SET junk = 1 WHERE junk = 0 AND lower(ext) IN ({marks})",
+                      sorted(CLUTTER_EXT)).rowcount
 
 
 # subject categories, in order: a distinct file takes the first one any of its copies has

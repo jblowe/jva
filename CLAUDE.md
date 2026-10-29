@@ -27,7 +27,7 @@ balancer has the certificate), gunicorn on 127.0.0.1:8007 via systemd unit `jva`
 
 ## Layout
 
-- `jva/` shared library: catalog.py (schemas, clutter rules incl. "System Folder"), unique.py
+- `jva/` shared library: catalog.py (schemas, clutter rules: "System Folder", .m4a), unique.py
   (unique_files), similar.py (second-level grouping: THE one place for the rules), search_prep.py,
   kinds.py (file kinds, SITES, SEASONS, RULES_VERSION), volumes.py, deletion.py, tiff.py, publish.py
 - `scripts/`: drive_inventory, identify_archive (scan, hash, Siegfried, unique, groups, reports,

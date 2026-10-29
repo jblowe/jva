@@ -66,7 +66,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
-from jva.catalog import FILE_COLS, FILES as SCHEMA, gb, is_clutter, log, mark_clutter_folders, write_csv  # noqa: E402
+from jva.catalog import (CLUTTER_EXT, FILE_COLS, FILES as SCHEMA, gb, is_clutter, log,  # noqa: E402
+                        mark_clutter_folders, mark_clutter_types, write_csv)
 from jva.search_prep import prepare  # noqa: E402
 from jva.unique import build_unique  # noqa: E402
 from jva import volumes  # noqa: E402
@@ -109,6 +110,9 @@ def open_catalogue(outdir):
     n = mark_clutter_folders(db)
     if n:
         log(f"   {n:,} files in Mac OS System Folders now count as clutter")
+    n = mark_clutter_types(db)
+    if n:
+        log(f"   {n:,} files of clutter types ({', '.join(sorted(CLUTTER_EXT))}) now count as clutter")
     db.commit()
     return db
 

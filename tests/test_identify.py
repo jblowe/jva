@@ -75,6 +75,7 @@ class SystemFolder(unittest.TestCase):
         self.assertTrue(is_clutter("x.pdf", 10, "a/System Folder 9.2/Extensions/x.pdf"))
         self.assertFalse(is_clutter("notes.doc", 10, "a/System Drive/Documents/notes.doc"))
         self.assertFalse(is_clutter("x.doc", 10, "a/Filing System Folders/x.doc"))
+        self.assertTrue(is_clutter("01 Highway Blues.M4A", 10, "My Music/01 Highway Blues.M4A"))
         root, config = H.make_archive()
         sysf = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "OLD MAC" / "System Folder" / "Extensions"
         sysf.mkdir(parents=True)
@@ -83,10 +84,14 @@ class SystemFolder(unittest.TestCase):
         # a row catalogued before the rule existed
         db.execute("INSERT INTO files(archive, unit, drive, path, name, ext, size, mtime, junk) VALUES "
                    "('ARCH2', 'CumulativeArchive', 'X', 'CumulativeArchive/X/System Folder/Finder', 'Finder', '', 9, 0, 0)")
+        db.execute("INSERT INTO files(archive, unit, drive, path, name, ext, size, mtime, junk) VALUES "
+                   "('ARCH2', 'CumulativeArchive', 'X', 'CumulativeArchive/X/song.m4a', 'song.m4a', '.m4a', 9, 0, 0)")
         db.commit()
         r = H.run_script("identify_archive", "-a", "ARCH1", "--skip-identify", config=config)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("System Folders now count as clutter", r.stderr)
+        self.assertIn("1 files of clutter types (.m4a)", r.stderr)
+        self.assertEqual(db.execute("SELECT junk FROM files WHERE name = 'song.m4a'").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT name, junk, unique_id FROM files WHERE path LIKE '%System Folder%' "
                                     "ORDER BY name").fetchall(), [("Finder", 1, None), ("QuickTime", 1, None)])
 
