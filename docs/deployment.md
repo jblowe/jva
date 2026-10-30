@@ -24,12 +24,10 @@ The repository lives at `~/GitHub/jva` on the Mac and `~/jva` on the server; Git
 (https://github.com/jblowe/jva) is how code gets from one to the other.
 
 ```sh
-git clone ~/Claude/Projects/Voelker/jva.bundle ~/GitHub/jva     # or from GitHub, once pushed
+git clone https://github.com/jblowe/jva.git ~/GitHub/jva
 cd ~/GitHub/jva
-git remote set-url origin https://github.com/jblowe/jva.git
 cp config.example.json config.json            # check data_dir, derivatives_dir and "publish"
 python3 scripts/prepare_search.py             # once, for this version
-git push -u origin main                       # so the server can clone it
 ```
 
 ## Once: set up the server
