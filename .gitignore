@@ -230,3 +230,6 @@ derivatives/
 _derivatives/
 .DS_Store
 ._*
+
+# FMP Tools, compiled by scripts/filemaker_to_csv.py
+third_party/fmptools/build/

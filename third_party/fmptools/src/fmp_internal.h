@@ -1,0 +1,43 @@
+/* Upper bound on table/column indexes read out of the file. Anything past
+ * this is corrupt input, not a database with that many columns. */
+#define FMP_MAX_INDEX 100000
+
+typedef enum {
+    CHUNK_NEXT,
+    CHUNK_DONE,
+    CHUNK_ABORT
+} chunk_status_t;
+
+typedef int (*block_handler)(fmp_block_t *block, void *ctx);
+typedef chunk_status_t (*chunk_handler)(fmp_chunk_t *chunk, void *ctx);
+
+uint64_t path_value(fmp_chunk_t *chunk, fmp_data_t *path);
+void debug(const char *fmt, ...);
+fmp_error_t process_blocks(fmp_file_t *file,
+        block_handler handle_block,
+        chunk_handler handle_chunk,
+        void *user_ctx);
+fmp_error_t process_block(fmp_file_t *file, fmp_block_t *block);
+fmp_block_t *new_block_from_sector(fmp_file_t *file, const uint8_t *sector, fmp_error_t *error);
+
+void convert(iconv_t converter, uint8_t xor_mask,
+        char *dst, size_t dst_len, uint8_t *src, size_t src_len);
+size_t convert_scsu_to_utf8(
+        char **restrict inbuf, size_t *restrict inbytesleft,
+        char **restrict outbuf, size_t *restrict outbytesleft);
+
+int table_path_match_start1(fmp_chunk_t *chunk, int depth, int val);
+int table_path_match_start2(fmp_chunk_t *chunk, int depth, int val1, int val2);
+int path_is(fmp_chunk_t *chunk, fmp_data_t *path, uint64_t value);
+
+/* Bounds-checked accessor for the chunk path. Callers used to index
+ * chunk->path[N] directly without consulting path_level, which reads
+ * uninitialized pointers out of the file's path array. */
+static inline fmp_data_t *path_at(fmp_chunk_t *chunk, long i) {
+    if (i < 0 || (size_t)i >= (size_t)chunk->path_level)
+        return (fmp_data_t *)0;
+    return chunk->path[i];
+}
+
+int name_chunk(fmp_chunk_t *chunk, int node_level, int *first);
+void append_name(fmp_file_t *file, fmp_chunk_t *chunk, int first, char *utf8_name, size_t size);

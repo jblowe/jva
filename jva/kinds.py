@@ -63,6 +63,12 @@ WORD_MAC = {"WDBN", "W6BN", "W8BN"}
 RULES_VERSION = 5
 
 
+def is_filemaker(ext, mac_type, fmt=""):
+    """A FileMaker Pro database? (extension, Mac type code, or Siegfried's format name)"""
+    return ((ext or "").lower() in (".fp3", ".fp5", ".fp7", ".fmp12", ".fmp")
+            or (mac_type or "").startswith("FMP") or "filemaker" in (fmt or "").lower())
+
+
 def kind_of(ext, mime, mac_type, creator="", fmt=""):
     """Image, PDF, MS Word, Presentation, Spreadsheet, Database, Text, Web page, Video, Audio or
     Other, from a file's extension, MIME type, classic Mac type and creator codes, and the format

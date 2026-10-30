@@ -34,7 +34,7 @@ balancer has the certificate), gunicorn on 127.0.0.1:8007 via systemd unit `jva`
   prepare), classify_archive (+ rules/classify_rules.csv), make_derivatives, free_space,
   delete_files, check_tiffs, repair_tiffs, prepare_search, publish, time_queries, and reports:
   date_report (creation_dates.xlsx), word_report (word_documents.xlsx), similar_report
-  (similar_files.xlsx); find_documents (finds documents by their title pages, searches in
+  (similar_files.xlsx), filemaker_to_csv (~/jva_fm; vendored third_party/fmptools); find_documents (finds documents by their title pages, searches in
   rules/searches/, e.g. catalogs.csv; spreadsheet and copies go to ~/jva_found, its text cache is
   document_text.sqlite in the data folder)
 - `webapp/`: app.py (modes local/public), wsgi.py, templates/, static/
