@@ -14,7 +14,8 @@ a copy is plugged in, and each of its tables is written as a CSV file:
   the same name again     -> TAP92 Bags (2).csv          (a different database, same name)
 
 _index.csv says which CSV came from which database and copy, how many records and fields
-it has, and which databases couldn't be read and why. Running it again replaces the CSVs it
+it has, and which databases couldn't be read and why. Tables with no records (only field
+names) get no CSV, just a line in _index.csv. Running it again replaces the CSVs it
 made last time (those listed in _index.csv) and leaves anything else in the folder alone.
 
 The CSVs are UTF-8 (with a byte-order mark, so Excel shows accents right), quoted where
@@ -195,8 +196,12 @@ def main():
                 fname = f"{stem}.csv" if used[k] == 1 else f"{stem} ({used[k]}).csv"
                 recs, fields = write_table(cdb, t, out / fname)
                 n_records += recs
-                index.append([fname, d["name"], t, recs, fields, *row[1:],
-                              "no records, only the field names" if recs == 0 else ""])
+                if recs == 0:                       # field names only: no CSV, just a line in the index
+                    (out / fname).unlink()
+                    used[k] -= 1
+                    index.append(["", d["name"], t, 0, fields, *row[1:], "no CSV: the table has no records"])
+                else:
+                    index.append([fname, d["name"], t, recs, fields, *row[1:], ""])
             cdb.close()
             n_ok += 1
             if i % 25 == 0:
@@ -208,8 +213,10 @@ def main():
                     "copies", "sha256", "note"])
         w.writerows(index)
     n_csv = sum(1 for r in index if r[0])
+    n_empty = sum(1 for r in index if not r[0] and r[2])
     print(f"Wrote {n_csv:,} CSV files ({n_records:,} records) from {n_ok:,} of {len(docs):,} FileMaker "
-          f"databases into {out}; {len(docs) - n_ok:,} couldn't be read (see {INDEX}).")
+          f"databases into {out}; {n_empty:,} empty tables left out; {len(docs) - n_ok:,} databases "
+          f"couldn't be read (see {INDEX}).")
 
 
 if __name__ == "__main__":
