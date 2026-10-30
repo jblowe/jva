@@ -15,7 +15,9 @@ a copy is plugged in, and each of its tables is written as a CSV file:
 
 _index.csv says which CSV came from which database and copy, how many records and fields
 it has, and which databases couldn't be read and why. Tables with no records (only field
-names) get no CSV, just a line in _index.csv. Running it again replaces the CSVs it
+names) get no CSV, just a line in _index.csv; so do tables with exactly the same fields and
+records as one already written (many databases were copied and renamed): the note names the
+CSV that has their data. --keep-duplicates writes them all. Running it again replaces the CSVs it
 made last time (those listed in _index.csv) and leaves anything else in the folder alone.
 
 The CSVs are UTF-8 (with a byte-order mark, so Excel shows accents right), quoted where
@@ -31,6 +33,7 @@ compiles the first time, with the Mac's C compiler (xcode-select --install, if i
 """
 import argparse
 import csv
+import hashlib
 import platform
 import re
 import shutil
@@ -163,6 +166,8 @@ def clear_previous(out):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-o", "--out", default="~/jva_fm", help="the folder for the CSVs (default ~/jva_fm)")
+    ap.add_argument("--keep-duplicates", action="store_true",
+                    help="write a CSV for every table, even when another has exactly the same data")
     ap.add_argument("--catalogue", default=str(CONFIG.catalogue))
     a = ap.parse_args()
     tool = build_tool()
@@ -172,7 +177,7 @@ def main():
     db = connect(a.catalogue, readonly=True)
     docs = filemaker_files(db)
     log(f"{len(docs):,} distinct FileMaker databases in the catalogue")
-    used, index, n_records, n_ok = {}, [], 0, 0
+    used, written, index, n_records, n_ok = {}, {}, [], 0, 0
     with tempfile.TemporaryDirectory() as work:
         for i, d in enumerate(docs, 1):
             paths, where = copies_of(db, d["uid"], CONFIG.volumes_root)
@@ -190,18 +195,24 @@ def main():
             cdb = sqlite3.connect(conv)
             tables = [t for (t,) in cdb.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid")]
             for t in tables:
+                tmp = Path(work) / "table.csv"
+                recs, fields = write_table(cdb, t, tmp)
+                if recs == 0:                       # field names only: no CSV, just a line in the index
+                    index.append(["", d["name"], t, 0, fields, *row[1:], "no CSV: the table has no records"])
+                    continue
+                digest = hashlib.sha256(tmp.read_bytes()).hexdigest()
+                if digest in written and not a.keep_duplicates:     # the very same fields and records
+                    index.append(["", d["name"], t, recs, fields, *row[1:],
+                                  f"no CSV: the same data as {written[digest]}"])
+                    continue
                 stem = base if len(tables) == 1 or t == FM_EXT.sub("", d["name"]) else f"{base} - {safe(t)}"
                 k = stem.lower()
                 used[k] = used.get(k, 0) + 1
                 fname = f"{stem}.csv" if used[k] == 1 else f"{stem} ({used[k]}).csv"
-                recs, fields = write_table(cdb, t, out / fname)
+                shutil.move(str(tmp), out / fname)
+                written[digest] = fname
                 n_records += recs
-                if recs == 0:                       # field names only: no CSV, just a line in the index
-                    (out / fname).unlink()
-                    used[k] -= 1
-                    index.append(["", d["name"], t, 0, fields, *row[1:], "no CSV: the table has no records"])
-                else:
-                    index.append([fname, d["name"], t, recs, fields, *row[1:], ""])
+                index.append([fname, d["name"], t, recs, fields, *row[1:], ""])
             cdb.close()
             n_ok += 1
             if i % 25 == 0:
@@ -213,10 +224,11 @@ def main():
                     "copies", "sha256", "note"])
         w.writerows(index)
     n_csv = sum(1 for r in index if r[0])
-    n_empty = sum(1 for r in index if not r[0] and r[2])
+    n_empty = sum(1 for r in index if r[-1] == "no CSV: the table has no records")
+    n_dup = sum(1 for r in index if r[-1].startswith("no CSV: the same data"))
     print(f"Wrote {n_csv:,} CSV files ({n_records:,} records) from {n_ok:,} of {len(docs):,} FileMaker "
-          f"databases into {out}; {n_empty:,} empty tables left out; {len(docs) - n_ok:,} databases "
-          f"couldn't be read (see {INDEX}).")
+          f"databases into {out}; left out {n_empty:,} empty tables and {n_dup:,} tables with the same data "
+          f"as another; {len(docs) - n_ok:,} databases couldn't be read (see {INDEX}).")
 
 
 if __name__ == "__main__":

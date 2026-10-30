@@ -29,6 +29,9 @@ class FileMakerToCSV(unittest.TestCase):
         d = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "DATABASES"
         d.mkdir(parents=True)
         shutil.copyfile(SAMPLE, d / "Government Types.fp3")
+        copy = bytearray(SAMPLE.read_bytes())            # a copy that differs by an unused byte:
+        copy[3071] = 0x20                                 # another distinct file, the same data
+        (d / "Government Types2.fp3").write_bytes(bytes(copy))
         (d / "old one.fp3").write_bytes(b"\x00\x01\x00\x00\x00\x09 not a FileMaker 3 file" * 50)
         (d / "notes.doc").write_bytes(b"\xd0\xcf\x11\xe0 not a database" * 20)
         r = H.run_script("identify_archive", "-a", "ARCH1", "--skip-identify", config=config)
@@ -39,14 +42,17 @@ class FileMakerToCSV(unittest.TestCase):
         for _ in range(2):                                  # a second run replaces the first
             r = H.run_script("filemaker_to_csv", "-o", str(out), config=config)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("from 1 of 2 FileMaker databases", r.stdout)
+        self.assertIn("from 2 of 3 FileMaker databases", r.stdout)
         rows = list(csv.reader(open(out / "Government Types.csv", encoding="utf-8-sig", newline="")))
         self.assertGreater(len(rows), 1)
         self.assertEqual(len({len(x) for x in rows}), 1)  # every record has every field
         index = list(csv.DictReader(open(out / "_index.csv", encoding="utf-8-sig", newline="")))
-        self.assertEqual([x["database"] for x in index], ["Government Types.fp3", "old one.fp3"])
+        self.assertEqual([x["database"] for x in index], ["Government Types.fp3", "Government Types2.fp3",
+                                                              "old one.fp3"])
         self.assertEqual(index[0]["csv_file"], "Government Types.csv")
-        self.assertIn("FileMaker Pro 1 or 2", index[1]["note"])
+        self.assertEqual((index[1]["csv_file"], index[1]["note"]), ("", "no CSV: the same data as Government Types.csv"))
+        self.assertIn("1 tables with the same data", r.stdout)
+        self.assertIn("FileMaker Pro 1 or 2", index[2]["note"])
         self.assertEqual(sorted(p.name for p in out.iterdir()), ["Government Types.csv", "_index.csv", "mine.txt"])
 
 
