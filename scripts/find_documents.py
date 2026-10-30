@@ -472,6 +472,7 @@ def locations(db, uid, n=10):
 def write_xlsx(path, db, search, files, texts, matches, best, name_only, marks):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
     from openpyxl.utils import get_column_letter as col
 
     F = "Arial"
@@ -492,6 +493,8 @@ def write_xlsx(path, db, search, files, texts, matches, best, name_only, marks):
 
     def put(ws, r, vals, fill=None):
         for i, v in enumerate(vals, 1):
+            if isinstance(v, str):
+                v = ILLEGAL_CHARACTERS_RE.sub("", v)    # control characters from PDFs: Excel refuses them
             c = ws.cell(r, i, v)
             c.font = plain
             c.alignment = wrap
