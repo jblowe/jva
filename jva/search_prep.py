@@ -1,7 +1,8 @@
 """Helper tables that make the search app fast (run by prepare_search.py, and by
 identify_archive.py after each run):
 
-  unique_files.kind   Image / PDF / Document / Video / Audio / Other, stored and indexed
+  unique_files.kind   Image, PDF, MS Word, Presentation, Spreadsheet, Database, Text, Web page,
+                      Video, Audio or Other (jva/kinds.py), stored and indexed
   unique_archives     which archive drives each distinct file is on
   unique_drives       which source drives each distinct file came from
   unique_tags         Site and Season, from the words in each file's paths (jva.kinds)
@@ -17,14 +18,14 @@ from jva.kinds import RULES_VERSION, kind_of, tags_of
 
 def prepare(db, step=lambda msg: None):
     """Build or rebuild everything above; returns the number of distinct files."""
-    db.create_function("kind_of", 4, kind_of, deterministic=True)
+    db.create_function("kind_of", 5, kind_of, deterministic=True)
     cols = {r[1] for r in db.execute("PRAGMA table_info(unique_files)")}
     if not cols:
         raise RuntimeError("The catalogue has no unique_files table yet: run identify_archive.py first.")
     with db:
         if "kind" not in cols:
             db.execute("ALTER TABLE unique_files ADD COLUMN kind TEXT")
-        db.execute("UPDATE unique_files SET kind = kind_of(ext, mime, mac_type, mac_creator)")
+        db.execute("UPDATE unique_files SET kind = kind_of(ext, mime, mac_type, mac_creator, format)")
         db.execute("CREATE INDEX IF NOT EXISTS i_u_kind ON unique_files(kind)")
     step("stored each file's kind")
 

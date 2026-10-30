@@ -214,9 +214,11 @@ Five steps, with progress on screen:
 | `appledouble_orphans.csv` | `._` files with nothing beside them: the file or folder they belong to isn't on the archive drive. Usually that file didn't make it onto the drive, or an empty folder (only files are listed) |
 
 System clutter (`.DS_Store`, `Thumbs.db`, empty files, and every hidden dot-file, above
-all the `._` files), everything in a Mac OS `System Folder`, and every `.m4a` audio file
-(iTunes music and the like) is catalogued but treated as clutter. The folder and file-type
-lists are `CLUTTER_FOLDERS` and `CLUTTER_EXT` in `jva/catalog.py`; after changing them, run
+all the `._` files), everything in a Mac OS `System Folder`, every `.m4a` audio file (iTunes
+music and the like) and `.xml` file, and PowerPoint "Save as Web Page" exports (every file in a
+folder holding slide pages `sld001.htm`, `tsld001.htm`, ...) is catalogued but treated as
+clutter. The rules are `CLUTTER_FOLDERS`, `CLUTTER_EXT` and `POWERPOINT_PAGE` in
+`jva/catalog.py`; after changing them, run
 `python3 scripts/identify_archive.py --reports` to apply them to files already catalogued.
 Clutter isn't checksummed, never counts
 as a duplicate, and is left out of `unique_files`, the search app, the preview images and

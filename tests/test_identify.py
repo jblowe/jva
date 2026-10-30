@@ -76,10 +76,17 @@ class SystemFolder(unittest.TestCase):
         self.assertFalse(is_clutter("notes.doc", 10, "a/System Drive/Documents/notes.doc"))
         self.assertFalse(is_clutter("x.doc", 10, "a/Filing System Folders/x.doc"))
         self.assertTrue(is_clutter("01 Highway Blues.M4A", 10, "My Music/01 Highway Blues.M4A"))
+        self.assertTrue(is_clutter("settings.XML", 10, "a/settings.XML"))
+        self.assertTrue(is_clutter("sld012.htm", 10, "a/talk_files/sld012.htm"))
         root, config = H.make_archive()
         sysf = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "OLD MAC" / "System Folder" / "Extensions"
         sysf.mkdir(parents=True)
         (sysf / "QuickTime").write_bytes(b"not content" * 10)
+        talk = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "LECTURES" / "talk_files"
+        talk.mkdir(parents=True)
+        for n in ("sld001.htm", "tsld001.htm", "master03.htm", "img001.jpg"):
+            (talk / n).write_bytes(n.encode() * 20)
+        (talk.parent / "notes.htm").write_bytes(b"<p>my own page</p>" * 5)
         db = H.connect(config)
         # a row catalogued before the rule existed
         db.execute("INSERT INTO files(archive, unit, drive, path, name, ext, size, mtime, junk) VALUES "
@@ -90,7 +97,11 @@ class SystemFolder(unittest.TestCase):
         r = H.run_script("identify_archive", "-a", "ARCH1", "--skip-identify", config=config)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("System Folders now count as clutter", r.stderr)
-        self.assertIn("1 files of clutter types (.m4a)", r.stderr)
+        self.assertIn("1 files of clutter types (.m4a, .xml)", r.stderr)
+        self.assertIn("2 files in PowerPoint web exports", r.stderr)     # the slide pages themselves at the scan
+        rows = db.execute("SELECT name, junk FROM files WHERE path LIKE '%talk_files/%' ORDER BY name").fetchall()
+        self.assertEqual(rows, [("img001.jpg", 1), ("master03.htm", 1), ("sld001.htm", 1), ("tsld001.htm", 1)])
+        self.assertEqual(db.execute("SELECT junk FROM files WHERE name = 'notes.htm'").fetchone()[0], 0)
         self.assertEqual(db.execute("SELECT junk FROM files WHERE name = 'song.m4a'").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT name, junk, unique_id FROM files WHERE path LIKE '%System Folder%' "
                                     "ORDER BY name").fetchall(), [("Finder", 1, None), ("QuickTime", 1, None)])

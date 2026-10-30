@@ -248,12 +248,12 @@ def catalogue_items(db):
     cols = {r[1] for r in db.execute("PRAGMA table_info(unique_files)")}
     kind = "COALESCE(kind, '')" if "kind" in cols else "''"
     info = {}
-    for uid, name, kd, ext, mime, mtype, mcreator, size, cat, archive, path in db.execute(
-            f"SELECT id, name, {kind}, lower(ext), mime, mac_type, mac_creator, size_bytes, "
+    for uid, name, kd, ext, mime, mtype, mcreator, fmt, size, cat, archive, path in db.execute(
+            f"SELECT id, name, {kind}, lower(ext), mime, mac_type, mac_creator, format, size_bytes, "
             "COALESCE(category, 'Unclassified'), archive, path FROM unique_files"):
         if not kd:
             from jva.kinds import kind_of
-            kd = kind_of(ext, mime, mtype, mcreator)
+            kd = kind_of(ext, mime, mtype, mcreator, fmt)
         info[uid] = {"uid": uid, "name": name, "kind": kd, "ext": ext, "size": size or 0, "category": cat,
                      "archive": archive, "path": path, "location": f"{archive}: {path}", "folders": set()}
     for uid, path in db.execute("SELECT unique_id, path FROM files WHERE unique_id IS NOT NULL AND junk = 0"):

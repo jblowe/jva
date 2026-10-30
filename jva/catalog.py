@@ -148,18 +148,24 @@ JUNK_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini", "Icon\r", ".localized", "
 # Folders whose whole contents are clutter: the classic Mac OS "System Folder" (also
 # "System Folder 9.2", "System Folder (old)", "System Folder copy", ...)
 CLUTTER_FOLDERS = re.compile(r"(^|/)System Folder(?: [^/]*)?/", re.I)
-# File types whose files are all clutter: .m4a audio (iTunes music, students' recordings)
-CLUTTER_EXT = {".m4a"}
+# File types whose files are all clutter: .m4a audio (iTunes music, students' recordings),
+# .xml (program settings and the like)
+CLUTTER_EXT = {".m4a", ".xml"}
+# PowerPoint "Save as Web Page" exports: a folder of slide pages (sld001.htm, tsld001.htm) with
+# the pictures, outline and frames that go with them, all made from a presentation. A folder
+# holding such a slide page is clutter, every file in it.
+POWERPOINT_PAGE = re.compile(r"^t?sld\d+\.html?$", re.I)
 
 
 def is_clutter(name, size, path=""):
     """Catalogued, but never treated as content: system files, empty files, every hidden
     dot-file -- above all the "._" AppleDouble files exFAT drives keep next to Mac files --
-    everything in a CLUTTER_FOLDERS folder, and files of a CLUTTER_EXT type. A "._" file holds the Mac type/creator codes and
+    everything in a CLUTTER_FOLDERS folder, files of a CLUTTER_EXT type, and PowerPoint web
+    export pages (the rest of such a folder is marked by mark_powerpoint_exports()). A "._" file holds the Mac type/creator codes and
     resource fork of the file it sits beside; the scan reads those into that file's own row
     (mac_type, mac_creator, rsrc_bytes)."""
     return (name in JUNK_NAMES or size == 0 or name.startswith(".") or bool(CLUTTER_FOLDERS.search(path))
-            or os.path.splitext(name)[1].lower() in CLUTTER_EXT)
+            or os.path.splitext(name)[1].lower() in CLUTTER_EXT or bool(POWERPOINT_PAGE.match(name)))
 
 
 def mark_clutter_folders(db):
@@ -230,3 +236,29 @@ def write_csv(path, header, rows):
 
 def log(*a):
     print(*a, file=sys.stderr, flush=True)
+
+
+def mark_powerpoint_exports(db):
+    """Mark every file in a folder that holds a PowerPoint web export page as clutter. -> how many."""
+    dirs = set()
+    for archive, path in db.execute("SELECT archive, path FROM files WHERE lower(name) LIKE 'sld%' "
+                                    "OR lower(name) LIKE 'tsld%'"):
+        if POWERPOINT_PAGE.match(path.rsplit("/", 1)[-1]) and "/" in path:
+            dirs.add((archive, path.rsplit("/", 1)[0]))
+    n = 0
+    for archive, d in dirs:
+        n += db.execute("UPDATE files SET junk = 1 WHERE junk = 0 AND archive = ? AND path >= ? AND path < ? "
+                        "AND instr(substr(path, ?), '/') = 0",
+                        (archive, d + "/", d + "0", len(d) + 2)).rowcount
+    return n
+
+
+def apply_clutter_rules(db):
+    """Apply the clutter rules to files already catalogued. -> [(how many, what)] for the rules
+    that marked anything."""
+    out = [(db.execute("UPDATE files SET junk = 1 WHERE junk = 0 AND substr(name, 1, 1) = '.'").rowcount,
+            'hidden dot-files (mostly Mac "._" files)'),
+           (mark_clutter_folders(db), "files in Mac OS System Folders"),
+           (mark_clutter_types(db), f"files of clutter types ({', '.join(sorted(CLUTTER_EXT))})"),
+           (mark_powerpoint_exports(db), "files in PowerPoint web exports")]
+    return [(n, what) for n, what in out if n]

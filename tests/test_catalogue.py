@@ -71,7 +71,7 @@ class SearchPreparation(unittest.TestCase):
     def test_kinds_sites_seasons(self):
         kind = dict(DB.execute("SELECT name, kind FROM unique_files"))
         self.assertEqual(kind["Burial 2.jpg"], "Image")
-        self.assertEqual(kind["lecture.ppt"], "Document")
+        self.assertEqual(kind["lecture.ppt"], "Presentation")
         tags = DB.execute("SELECT u.name, t.facet, t.value FROM unique_tags t JOIN unique_files u ON u.id = t.unique_id "
                           "ORDER BY 1, 2, 3").fetchall()
         self.assertIn(("Burial 2.jpg", "site", "npw"), tags)
@@ -86,7 +86,7 @@ class SearchPreparation(unittest.TestCase):
         from jva.kinds import kind_of, tags_of
         self.assertEqual(kind_of("", "", "TEXT", "ART5"), "Image")         # Illustrator PostScript
         self.assertEqual(kind_of(".pdf", "", "", ""), "PDF")
-        self.assertEqual(kind_of("", "", "WDBN", "MSWD"), "Document")
+        self.assertEqual(kind_of("", "", "WDBN", "MSWD"), "MS Word")
         self.assertEqual(sorted(tags_of("NPW86 sherds/TAP94.export")),
                          [("season", "86"), ("season", "94"), ("site", "npw")])
 

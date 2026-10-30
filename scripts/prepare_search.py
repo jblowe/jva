@@ -10,7 +10,8 @@ failed, or the first time. Without it the search app still works, just more slow
 and falls back).
 
 What it adds (nothing existing is changed or removed):
-  unique_files.kind   Image / PDF / Document / Video / Audio / Other, stored and indexed
+  unique_files.kind   Image, PDF, MS Word, Presentation, Spreadsheet, Database, Text, Web page,
+                      Video, Audio or Other (jva/kinds.py), stored and indexed
   unique_archives     which archive drives each distinct file is on
   unique_drives       which source drives each distinct file came from
   unique_tags         each distinct file's Site (NPW, NML, TK, NKH, PL, PF) and Season (85, 86,

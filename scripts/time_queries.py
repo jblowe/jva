@@ -110,7 +110,7 @@ def main():
     a = ap.parse_args()
     raw = sqlite3.connect(f"file:{a.catalogue}?mode=ro", uri=True)
     raw.row_factory = sqlite3.Row
-    raw.create_function("kind", 4, A.kind_of, deterministic=True)
+    raw.create_function("kind", 5, A.kind_of, deterministic=True)
     con = Timed(raw)
     A.db = lambda: con
     A.has_table = lambda t: raw.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone() is not None

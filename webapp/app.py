@@ -60,8 +60,9 @@ from jva.kinds import KINDS, SEASONS, SITES, kind_of  # noqa: E402
 from jva.search_prep import is_prepared as _tables_ready  # noqa: E402
 
 
-PLACEHOLDER_FOR_KIND = {"Image": "image", "PDF": "document", "Document": "document",
-                        "Video": "video", "Audio": "audio", "Other": "unknown"}
+PLACEHOLDER_FOR_KIND = {"Image": "image", "PDF": "document", "MS Word": "document", "Presentation": "document",
+                        "Spreadsheet": "document", "Database": "database", "Text": "document",
+                        "Web page": "code", "Video": "video", "Audio": "audio", "Other": "unknown"}
 
 
 # ---------- database ----------
@@ -72,7 +73,7 @@ def db():
             abort(500, f"Catalogue not found: {CFG['catalogue']}")
         con = sqlite3.connect(f"file:{CFG['catalogue']}?mode=ro", uri=True, check_same_thread=False)
         con.row_factory = sqlite3.Row
-        con.create_function("kind", 4, kind_of, deterministic=True)
+        con.create_function("kind", 5, kind_of, deterministic=True)
         g.db = con
     return g.db
 
@@ -131,7 +132,7 @@ app.jinja_env.filters["rule_label"] = rule_label
 
 
 def kind_sql():
-    return "u.kind" if is_prepared() else "kind(u.ext, u.mime, u.mac_type, u.mac_creator)"
+    return "u.kind" if is_prepared() else "kind(u.ext, u.mime, u.mac_type, u.mac_creator, u.format)"
 
 
 def cat_in(vals):
@@ -462,7 +463,7 @@ def file_page(key):
             orig = {"inline": original_type(u) in INLINE_TYPES}
     return render_template("file.html", u=u, copies=copies, why=why, by_copy=by_copy, removed=removed,
                            deriv=deriv, neighbours=neighbours, vols=vols, folder=folder, orig=orig, group=group,
-                           kind=kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"]))
+                           kind=kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"], u["format"]))
 
 
 def reveal():
@@ -535,7 +536,8 @@ def image(size, key):
     u = unique_row(key)
     if u is None:
         abort(404)
-    placeholder = PLACEHOLDER_FOR_KIND[kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"])]
+    placeholder = PLACEHOLDER_FOR_KIND.get(kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"], u["format"]),
+                                           "unknown")
     if u["sha256"] and has_table("derivatives"):
         d = db().execute("SELECT status, root, thumb, preview FROM derivatives WHERE sha256=?",
                          (u["sha256"],)).fetchone()
@@ -664,7 +666,7 @@ def img_src(r, size="thumb"):
             placeholder = Path(d[size]).stem
     if placeholder is None:
         kind = _field(r, "kind") or kind_of(_field(r, "ext"), _field(r, "mime"), _field(r, "mac_type"),
-                                            _field(r, "mac_creator"))
+                                            _field(r, "mac_creator"), _field(r, "format"))
         placeholder = PLACEHOLDER_FOR_KIND.get(kind, "unknown")
     if not (HERE / "static" / "placeholder" / f"{placeholder}.svg").exists():
         placeholder = "unknown"

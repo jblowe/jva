@@ -66,8 +66,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
-from jva.catalog import (CLUTTER_EXT, FILE_COLS, FILES as SCHEMA, gb, is_clutter, log,  # noqa: E402
-                        mark_clutter_folders, mark_clutter_types, write_csv)
+from jva.catalog import (FILE_COLS, FILES as SCHEMA, apply_clutter_rules, gb, is_clutter, log,  # noqa: E402
+                        write_csv)
 from jva.search_prep import prepare  # noqa: E402
 from jva.unique import build_unique  # noqa: E402
 from jva import volumes  # noqa: E402
@@ -103,18 +103,14 @@ def open_catalogue(outdir):
             db.execute(f"ALTER TABLE files ADD COLUMN {c} {'TEXT' if c == 'created' else 'INTEGER'}")
     db.executescript(SCHEMA)
     db.execute("PRAGMA journal_mode=WAL")
-    # dot-files ("._" files, ._.DS_Store, .BridgeSort, ...) count as clutter since this version
-    n = db.execute("UPDATE files SET junk=1 WHERE junk=0 AND substr(name, 1, 1)='.'").rowcount
-    if n:
-        log(f"   {n:,} hidden dot-files (mostly Mac \"._\" files) now count as clutter")
-    n = mark_clutter_folders(db)
-    if n:
-        log(f"   {n:,} files in Mac OS System Folders now count as clutter")
-    n = mark_clutter_types(db)
-    if n:
-        log(f"   {n:,} files of clutter types ({', '.join(sorted(CLUTTER_EXT))}) now count as clutter")
-    db.commit()
+    mark_clutter(db)                 # rules added since the files were catalogued
     return db
+
+
+def mark_clutter(db):
+    for n, what in apply_clutter_rules(db):
+        log(f"   {n:,} {what} now count as clutter")
+    db.commit()
 
 
 def migrate_legacy(db):
@@ -647,7 +643,7 @@ def main():
         register_archive(db, archive, vol)
         sdirs = source_dirs(outdir, archive)
         log(f"== {archive}  ({vol})")
-        log("1. scan");     scan(db, archive, vol, sdirs); relabel(db, archive, sdirs)
+        log("1. scan");     scan(db, archive, vol, sdirs); relabel(db, archive, sdirs); mark_clutter(db)
         try:
             log("2. hash");     hash_files(db, archive, vol)
             if not a.skip_identify:

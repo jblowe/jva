@@ -54,7 +54,9 @@ python3 scripts/time_queries.py --cat TAP --q anvil
   switches between that and every distinct file on its own. The filter counts on the left
   always count distinct files. Search matches words in names and folder paths.
   Words are matched as prefixes (`anvil` finds "Anvils"), and `"quoted phrases"` must appear
-  together. Filters on the left narrow by site, season, category, kind, archive drive, source
+  together. Filters on the left narrow by site, season, category, kind (Image, PDF, MS Word --
+  including RTF --, Presentation, Spreadsheet, Database -- nearly all FileMaker --, Text,
+  Web page, Video, Audio, Other; see `kind_of` in `jva/kinds.py`), archive drive, source
   drive, copies and whether a preview exists. Results can be shown as slides or as a list,
   sorted by name (the default), site, season, folder, kind, size, copies, category or date
   modified -- from the **Sort by** menu, or by clicking a column heading in the list (click

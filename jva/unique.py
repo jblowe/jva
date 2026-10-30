@@ -139,7 +139,7 @@ def refresh_unique(db, uid, drop_derivative=None):
     if "kind" in {r[1] for r in db.execute("PRAGMA table_info(unique_files)")}:
         from jva.kinds import kind_of
         db.execute("UPDATE unique_files SET kind=? WHERE id=?",
-                   (kind_of(s["ext"], s["mime"], s["mac_type"], s["mac_creator"]), uid))
+                   (kind_of(s["ext"], s["mime"], s["mac_type"], s["mac_creator"], s["format"]), uid))
     if fts:
         new = db.execute(f"SELECT {fts_cols} FROM unique_files WHERE id=?", (uid,)).fetchone()
         db.execute(f"INSERT INTO unique_search(rowid, {fts_cols}) "
