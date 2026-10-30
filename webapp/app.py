@@ -442,16 +442,17 @@ def file_page(key):
     if grouped() and u["group_id"] is not None:
         g = con.execute("SELECT * FROM file_groups WHERE group_id = ?", (u["group_id"],)).fetchone()
         if g is not None:
-            me = (u["name"] or "").casefold()
+            from jva.similar import same_name
             members = []
             for m in con.execute("""SELECT id, sha256, name, ext, mime, mac_type, mac_creator, archive, path,
                                            copies, group_how, group_key, COALESCE(category, 'Unclassified') category
                                     FROM unique_files WHERE group_id = ? AND id <> ?
-                                    ORDER BY lower(name) <> ?, name COLLATE NOCASE LIMIT 500""",
-                                 (u["group_id"], u["id"], me)):
+                                    ORDER BY name COLLATE NOCASE LIMIT 500""",
+                                 (u["group_id"], u["id"])):
                 m = dict(m)
-                m["same_name"] = (m["name"] or "").casefold() == me
+                m["same_name"] = same_name(m["name"] or "", u["name"] or "")
                 members.append(m)
+            members.sort(key=lambda m: not m["same_name"])          # identical names first
             group = {"label": g["label"], "members": members, "count": g["members"],
                      "main": g["group_id"] == u["id"]}
     orig = None

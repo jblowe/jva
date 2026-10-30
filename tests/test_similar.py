@@ -15,6 +15,9 @@ class Rules(unittest.TestCase):
             self.assertIsNone(S.pass1_key(n), n)
         for n in ["10091.JPG", "NKH Stone Tools.xls", "Burial 2.jpg"]:
             self.assertIsNone(S.generic(n), n)
+        self.assertEqual(S.pass1_key("Burial 2.jpg"), S.pass1_key("BURIAL 2.TIF"))     # extension ignored
+        self.assertTrue(S.same_name("Burial 2.jpg", "Burial 2.tif"))
+        self.assertIsNone(S.pass1_key("023.jpg"))                                      # still made up
 
     def test_object_numbers(self):
         for n, key in [("10091.JPG", "10091"), ("10091 another 3.JPG", "10091"), ("39903.4.JPG", "39903.4"),

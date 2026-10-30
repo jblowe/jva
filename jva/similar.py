@@ -1,7 +1,8 @@
 """Second-level grouping of distinct files: files that are not identical (different SHA-256)
 but are versions of the same thing. Two passes over unique_files:
 
-  pass 1  same name     identical file names (ignoring case), wherever they are -- except
+  pass 1  same name     identical file names (ignoring case and extension: x.jpg = x.TIF),
+                        wherever they are -- except
                         names a camera, scanner or program makes up (IMG_0001.JPG, DSC_0090.JPG,
                         Untitled 3.jpg, 001.jpg ...), which say nothing about the content
   pass 2  same subject  names, or the folder they are in, that name the same object: e.g.
@@ -97,8 +98,6 @@ RULES = [
          re.compile(r"^china (\d+) box (\d+) picture (\d+)", I), r"china \1 box \2 picture \3", images_only=False),
     Rule("object folder: files in '10091 NPW', '5273  NKH', '16115 NPW Done Cloud'",
          re.compile(rf"^(?!{YEAR}\s){NUM}\s+{SITES}\b", I), r"\1", on="folder", images_only=False),
-    Rule("same picture in another format: x.jpg / x.tif / x.psd",
-         re.compile(r"^(.{6,})$", I), r"\1"),
 ]
 # the rules whose key is an object number (checked for numbers used at more than one site)
 OBJECT_RULES = {RULES[0].name, RULES[-2].name}
@@ -135,8 +134,14 @@ def generic(name):
 
 
 def pass1_key(name, path=""):
-    """Pass 1: the name itself, unless it is a made-up one or part of something else."""
-    return None if generic(name) or PART_OF.search(path or "") else norm(name)
+    """Pass 1: the name without its extension -- so 'Burial 2.jpg', 'Burial 2.tif' and
+    'Burial 2.JPG' are the same name -- unless it is a made-up one or part of something else."""
+    return None if generic(name) or PART_OF.search(path or "") else split(name)[0]
+
+
+def same_name(a, b):
+    """True when two file names are the same apart from case and extension."""
+    return split(a)[0] == split(b)[0]
 
 
 def pass2_key(name, folder, rules=RULES, path=""):
@@ -156,8 +161,6 @@ def pass2_key(name, folder, rules=RULES, path=""):
         else:
             k = r.match(stem)
         if k:
-            if r is rules[-1]:                    # "same picture, another format": key on the stem
-                k = "stem:" + k
             return r, k
     return None, None
 
@@ -211,7 +214,7 @@ def group(items, rules=RULES):
             u.union(members[0][0], x)
         for x, r in members:
             how.setdefault(x, r.name)
-            key_of[x] = k.removeprefix("stem:")
+            key_of[x] = k
     out, keys, names = {}, defaultdict(Counter), defaultdict(Counter)
     for uid, name, folder, path in items:
         g = u.find(uid)
