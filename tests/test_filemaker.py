@@ -1,6 +1,7 @@
 """filemaker_to_csv.py: FileMaker databases to CSV (needs a C compiler and SQLite's headers)."""
 import csv
 import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -11,7 +12,17 @@ import helpers as H  # noqa: E402
 SAMPLE = Path(__file__).resolve().parent / "data" / "governmenttypes.FP3"
 
 
-@unittest.skipUnless(shutil.which("cc") or shutil.which("gcc"), "needs a C compiler")
+def can_build():
+    """A C compiler and SQLite's header file (sqlite3.h; on a Mac they come with the command-line tools)."""
+    cc = shutil.which("cc") or shutil.which("gcc")
+    if not cc:
+        return False
+    r = subprocess.run([cc, "-x", "c", "-fsyntax-only", "-"], input="#include <sqlite3.h>\n",
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+
+@unittest.skipUnless(can_build(), "needs a C compiler and SQLite's headers")
 class FileMakerToCSV(unittest.TestCase):
     def test_export(self):
         root, config = H.make_archive()

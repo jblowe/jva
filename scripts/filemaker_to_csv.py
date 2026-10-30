@@ -74,7 +74,11 @@ def build_tool():
     log("compiling FMP Tools (once) ...")
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        sys.exit("Couldn't compile FMP Tools:\n" + r.stderr[-2000:])
+        hint = ""
+        if "sqlite3.h" in r.stderr:
+            hint = ("\nSQLite's header file is missing: on a Mac, xcode-select --install; "
+                    "on Ubuntu, sudo apt install libsqlite3-dev.")
+        sys.exit("Couldn't compile FMP Tools:\n" + r.stderr[-2000:] + hint)
     return TOOL
 
 
