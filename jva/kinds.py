@@ -103,6 +103,69 @@ def kind_of(ext, mime, mac_type, creator="", fmt=""):
     return "Other"
 
 
+# ---- Placeholders: the picture shown for a file that has no preview image of its own ----
+# name -> caption; the pictures are webapp/static/placeholder/<name>.svg
+PLACEHOLDERS = {
+    "filemaker": "FileMaker database", "database": "Database", "spreadsheet": "Spreadsheet",
+    "presentation": "Presentation", "word": "Word document", "pdf": "PDF", "text": "Text",
+    "layout": "Page layout", "web": "Web page", "email": "Email", "drawing": "Drawing",
+    "image": "Image", "video": "Video", "audio": "Audio", "archive": "Archive", "font": "Font",
+    "code": "Program code", "application": "Program", "settings": "Settings", "unknown": "File"}
+LAYOUT_EXT = {".pmd", ".pm4", ".pm5", ".pm6", ".p65", ".qxd", ".qxp", ".indd", ".pub"}
+LAYOUT_FORMAT = re.compile(r"pagemaker|quarkxpress|indesign|publisher", re.I)
+EMAIL_EXT = {".eml", ".msg", ".mbx", ".mbox", ".emlx", ".dbx", ".pst"}
+EMAIL_MAC = {"OEDB", "OECl", "MSNM"}
+EMAIL_FORMAT = re.compile(r"e-?mail|mailbox|outlook", re.I)
+DRAWING_FORMAT = re.compile(r"canvas|minicad|vectorworks|freehand|illustrator|coreldraw|autocad|"
+                            r"drawing exchange|superpaint|macdraw", re.I)
+ARCHIVE_EXT = {".zip", ".sit", ".sitx", ".sea", ".hqx", ".gz", ".tgz", ".bz2", ".tar", ".rar",
+               ".7z", ".dmg", ".iso", ".cpt", ".bin", ".img", ".toast"}
+ARCHIVE_FORMAT = re.compile(r"\bzip\b|gzip|stuffit|\btar\b|\brar\b|7-zip|disk image|binhex|bzip", re.I)
+FONT_EXT = {".ttf", ".otf", ".dfont", ".fon", ".suit", ".pfb", ".pfm", ".afm", ".bmap", ".ffil",
+            ".woff", ".woff2", ".eot"}
+APP_EXT = {".app", ".exe", ".dll", ".pkg", ".mpkg", ".msi", ".jar", ".dylib", ".so", ".plugin", ".com"}
+CODE_EXT = {".py", ".pl", ".c", ".h", ".java", ".sh", ".rb", ".sql", ".bas", ".pas", ".m", ".r"}
+SETTINGS_EXT = {".plist", ".ini", ".cfg", ".conf", ".pref", ".prefs", ".inf"}
+SETTINGS_FORMAT = re.compile(r"property list|configuration", re.I)
+PLACEHOLDER_FOR_KIND = {"Image": "image", "PDF": "pdf", "MS Word": "word", "Presentation": "presentation",
+                        "Spreadsheet": "spreadsheet", "Database": "database", "Text": "text",
+                        "Web page": "web", "Video": "video", "Audio": "audio"}
+
+
+def is_drawing(ext, mac_type, fmt=""):
+    """Canvas, MiniCAD, FreeHand and other drawing programs' files (not Illustrator's PostScript)."""
+    return (mac_type or "") in DRAWING_MAC or (ext or "").lower() in DRAWING_EXT or bool(DRAWING_FORMAT.search(fmt or ""))
+
+
+def placeholder_for(ext, mime, mac_type, creator="", fmt=""):
+    """The name of the placeholder picture (a key of PLACEHOLDERS) for a file with no preview."""
+    e, m, t, f = (ext or "").lower(), (mime or "").lower(), mac_type or "", fmt or ""
+    if is_filemaker(e, t, f):
+        return "filemaker"
+    if is_drawing(e, t, f) and not (creator or "").startswith("ART"):
+        return "drawing"
+    if e in LAYOUT_EXT or LAYOUT_FORMAT.search(f):
+        return "layout"
+    if e in EMAIL_EXT or t in EMAIL_MAC or EMAIL_FORMAT.search(f) or m.startswith("message/"):
+        return "email"
+    if e in SETTINGS_EXT or t == "pref" or SETTINGS_FORMAT.search(f):
+        return "settings"
+    kind = kind_of(e, m, t, creator, f)
+    if kind in PLACEHOLDER_FOR_KIND:
+        return PLACEHOLDER_FOR_KIND[kind]
+    if e in ARCHIVE_EXT or ARCHIVE_FORMAT.search(f):
+        return "archive"
+    if e in FONT_EXT or m.startswith("font/") or "font" in f.lower():
+        return "font"
+    if e in APP_EXT or t == "APPL" or re.search(r"executable", f, re.I):
+        return "application"
+    if e in CODE_EXT:
+        return "code"
+    if e in (".sqlite", ".db") or re.search(r"sqlite", f, re.I):
+        return "database"
+    return "unknown"
+
+
 # ---- Site and Season, from the words in a file's paths (all its copies) ----
 SITES = ["npw", "nml", "tk", "nkh", "pl", "pf"]        # shown in this order
 SEASONS = ["85", "86", "90", "92", "94"]                 # TAP field seasons

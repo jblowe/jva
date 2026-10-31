@@ -104,7 +104,9 @@ or `archive_catalog.sqlite` in `data_dir`), and `volumes_root` is shared with th
 | `serve_originals` | open/download original files. Unset or `true`: yes in local mode; `false`: no. Never in public mode |
 
 Previews need the drive holding the derivatives folder to be plugged in. Without it, files
-show a placeholder icon. Reveal in Finder needs the archive drive holding that copy to be
+show a placeholder icon. Files with no preview of their own (FileMaker databases, archives,
+email, ...) show a placeholder for their sort of file, with a caption: "FileMaker database",
+"Spreadsheet", "Word document", and so on (`jva/kinds.py`, `placeholder_for`). Reveal in Finder needs the archive drive holding that copy to be
 plugged in.
 
 ## On the web server

@@ -56,13 +56,8 @@ app.config["JSON_SORT_KEYS"] = False
 
 from jva import volumes  # noqa: E402
 from jva.catalog import DISPLAY_CATEGORIES as CATEGORIES, human  # noqa: E402
-from jva.kinds import KINDS, SEASONS, SITES, kind_of  # noqa: E402
+from jva.kinds import KINDS, SEASONS, SITES, kind_of, placeholder_for  # noqa: E402
 from jva.search_prep import is_prepared as _tables_ready  # noqa: E402
-
-
-PLACEHOLDER_FOR_KIND = {"Image": "image", "PDF": "document", "MS Word": "document", "Presentation": "document",
-                        "Spreadsheet": "document", "Database": "database", "Text": "document",
-                        "Web page": "code", "Video": "video", "Audio": "audio", "Other": "unknown"}
 
 
 # ---------- database ----------
@@ -355,8 +350,8 @@ def search():
     together = grouped() and request.args.get("similar") != "apart"
 
     frm, where, params = build(q, filters)
-    cols = f"""u.id, u.sha256, u.name, u.other_names, u.ext, u.mime, u.mac_type, u.size_bytes,
-               u.modified, u.copies, u.folder, COALESCE(u.category,'Unclassified') category,
+    cols = f"""u.id, u.sha256, u.name, u.other_names, u.ext, u.mime, u.mac_type, u.mac_creator, u.format,
+               u.size_bytes, u.modified, u.copies, u.folder, COALESCE(u.category,'Unclassified') category,
                {kind_sql()} kind"""
     try:
         if together:
@@ -445,7 +440,7 @@ def file_page(key):
         if g is not None:
             from jva.similar import same_name
             members = []
-            for m in con.execute("""SELECT id, sha256, name, ext, mime, mac_type, mac_creator, archive, path,
+            for m in con.execute("""SELECT id, sha256, name, ext, mime, mac_type, mac_creator, format, archive, path,
                                            copies, group_how, group_key, COALESCE(category, 'Unclassified') category
                                     FROM unique_files WHERE group_id = ? AND id <> ?
                                     ORDER BY name COLLATE NOCASE LIMIT 500""",
@@ -536,8 +531,6 @@ def image(size, key):
     u = unique_row(key)
     if u is None:
         abort(404)
-    placeholder = PLACEHOLDER_FOR_KIND.get(kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"], u["format"]),
-                                           "unknown")
     if u["sha256"] and has_table("derivatives"):
         d = db().execute("SELECT status, root, thumb, preview FROM derivatives WHERE sha256=?",
                          (u["sha256"],)).fetchone()
@@ -548,12 +541,7 @@ def image(size, key):
                     p = Path(root or "") / rel
                     if root and p.is_file():
                         return send_file(p, mimetype="image/webp", max_age=7 * 86400)
-            elif rel and rel.startswith("placeholder/"):
-                placeholder = Path(rel).stem
-    p = HERE / "static" / "placeholder" / f"{placeholder}.svg"
-    if not p.exists():
-        p = HERE / "static" / "placeholder" / "unknown.svg"
-    return send_file(p, mimetype="image/svg+xml", max_age=3600)
+    return send_file(placeholder_path(u), mimetype="image/svg+xml", max_age=3600)
 
 
 # originals the browser can show by itself; anything else is downloaded
@@ -658,19 +646,18 @@ def img_src(r, size="thumb"):
         cache[sha] = db().execute("SELECT status, thumb, preview FROM derivatives WHERE sha256=?",
                                   (sha,)).fetchone()
     d = cache.get(sha) if sha else None
-    placeholder = None
-    if d is not None and d[size]:
-        if d["status"] == "made":
-            return base.rstrip("/") + "/" + quote(d[size])
-        if d[size].startswith("placeholder/"):
-            placeholder = Path(d[size]).stem
-    if placeholder is None:
-        kind = _field(r, "kind") or kind_of(_field(r, "ext"), _field(r, "mime"), _field(r, "mac_type"),
-                                            _field(r, "mac_creator"), _field(r, "format"))
-        placeholder = PLACEHOLDER_FOR_KIND.get(kind, "unknown")
-    if not (HERE / "static" / "placeholder" / f"{placeholder}.svg").exists():
-        placeholder = "unknown"
-    return url_for("static", filename=f"placeholder/{placeholder}.svg")
+    if d is not None and d[size] and d["status"] == "made":
+        return base.rstrip("/") + "/" + quote(d[size])
+    return url_for("static", filename=f"placeholder/{placeholder_path(r).name}")
+
+
+def placeholder_path(r):
+    """The placeholder picture for a file with no preview: one per sort of file (FileMaker
+    database, spreadsheet, Word document...), chosen by jva.kinds.placeholder_for."""
+    name = placeholder_for(_field(r, "ext"), _field(r, "mime"), _field(r, "mac_type"),
+                           _field(r, "mac_creator"), _field(r, "format"))
+    p = HERE / "static" / "placeholder" / f"{name}.svg"
+    return p if p.exists() else HERE / "static" / "placeholder" / "unknown.svg"
 
 
 app.jinja_env.globals["img_src"] = img_src

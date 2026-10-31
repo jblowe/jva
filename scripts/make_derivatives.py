@@ -35,8 +35,8 @@ How:
   documents,   first page / first frame from macOS Quick Look (Word, Excel, PowerPoint,
   video, ...   Pages, Keynote, Numbers, RTF, text, HTML, video, ...); documents Quick Look
                can't do are tried in LibreOffice
-  the rest     no image of its own: a shared placeholder per kind (document, audio,
-               archive, font, application, unknown, ...)
+  the rest     no image of its own: a shared placeholder picture per sort of file (FileMaker
+               database, spreadsheet, Word document, archive, font, ...; jva.kinds)
 
   --only TAP   only files classify_archive.py put in these categories (comma-separated)
 
@@ -78,7 +78,7 @@ from jva.config import CONFIG  # noqa: E402
 from jva import volumes  # noqa: E402
 from jva.catalog import DERIVATIVES  # noqa: E402
 from jva.kinds import (DRAWING_EXT, DRAWING_MAC, IMAGE_EXT, IMAGE_MAC, OLD_DOC_MAC, PS_EXT,  # noqa: E402
-                       PS_MAC, WORD_MAC)
+                       PLACEHOLDERS, PS_MAC, WORD_MAC, placeholder_for)
 
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
 MARKER = ".archive-derivatives"          # identify_archive.py skips folders containing this
@@ -102,21 +102,6 @@ LO_DOC_EXT = {".doc", ".docx", ".dot", ".rtf", ".xls", ".xlsx", ".ppt", ".pptx",
 QL_TIMEOUT = 45     # seconds; Quick Look either renders a file quickly or hangs on it
 # Illustrator/PostScript (PS_*): the first bytes of the file decide how it is drawn (sniff()).
 
-PLACEHOLDER_KIND = [
-    ("drawing", DRAWING_EXT),
-    ("audio", {".mp3", ".m4a", ".aif", ".aiff", ".wav", ".flac", ".ogg", ".wma", ".aac", ".mid", ".midi"}),
-    ("archive", {".zip", ".sit", ".sitx", ".sea", ".hqx", ".gz", ".tgz", ".bz2", ".tar", ".rar",
-                 ".7z", ".dmg", ".iso", ".cpt", ".bin", ".img", ".toast"}),
-    ("font", {".ttf", ".otf", ".dfont", ".fon", ".suit", ".pfb", ".pfm", ".afm", ".bmap", ".ffil"}),
-    ("database", {".fp5", ".fp7", ".fmp12", ".mdb", ".accdb", ".db", ".sqlite", ".dbf", ".fmp"}),
-    ("application", {".app", ".exe", ".dll", ".pkg", ".mpkg", ".msi", ".jar", ".dylib", ".so", ".plugin"}),
-    ("code", {".py", ".pl", ".js", ".css", ".c", ".h", ".java", ".sh", ".php", ".rb", ".sql"}),
-    ("document", {".doc", ".docx", ".rtf", ".txt", ".pages", ".odt", ".wpd", ".wps", ".tex",
-                  ".xls", ".xlsx", ".numbers", ".ods", ".ppt", ".pptx", ".key", ".odp", ".pdf",
-                  ".html", ".htm", ".xml", ".csv", ".eml"}),
-    ("video", {".mov", ".mp4", ".m4v", ".avi", ".mpg", ".mpeg", ".3gp", ".mts", ".wmv", ".mkv"}),
-    ("image", IMAGE_EXT),
-]
 
 SCHEMA = DERIVATIVES
 
@@ -156,35 +141,19 @@ def category(ext, mime, mac_type, puid, creator=""):
     return "placeholder"
 
 
-def placeholder_kind(ext, mime, mac_type=""):
-    ext, mime = (ext or "").lower(), (mime or "").lower()
-    if (mac_type or "") in DRAWING_MAC:
-        return "drawing"
-    for kind, exts in PLACEHOLDER_KIND:
-        if ext in exts:
-            return kind
-    for prefix, kind in (("audio/", "audio"), ("video/", "video"), ("image/", "image"),
-                         ("text/", "document"), ("font/", "font")):
-        if mime.startswith(prefix):
-            return kind
-    return "unknown"
+def placeholder_kind(ext, mime, mac_type="", creator=""):
+    """The placeholder for a file with no image of its own (jva.kinds.placeholder_for)."""
+    return placeholder_for(ext, mime, mac_type, creator)
 
 
 def write_placeholders(dest):
+    """Copies of the search app's placeholder pictures, in <dest>/placeholder."""
     d = dest / "placeholder"
     d.mkdir(parents=True, exist_ok=True)
-    kinds = sorted({k for k, _ in PLACEHOLDER_KIND} | {"unknown"})
-    for k in kinds:
-        p = d / f"{k}.svg"
-        if not p.exists():
-            p.write_text(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480">'
-                '<rect width="480" height="480" rx="24" fill="#eceae4"/>'
-                '<path d="M170 110h100l60 60v200H170z" fill="#fff" stroke="#9a968c" stroke-width="6"/>'
-                '<path d="M270 110v60h60" fill="none" stroke="#9a968c" stroke-width="6"/>'
-                f'<text x="240" y="420" font-family="Helvetica,Arial,sans-serif" font-size="34" '
-                f'fill="#6b675e" text-anchor="middle">{k.upper()}</text></svg>', encoding="utf-8")
-    return kinds
+    for src in sorted((Path(__file__).resolve().parents[1] / "webapp" / "static" / "placeholder").glob("*.svg")):
+        if not (d / src.name).exists() or (d / src.name).read_bytes() != src.read_bytes():
+            shutil.copyfile(src, d / src.name)
+    return sorted(PLACEHOLDERS)
 
 
 # ---------- tools ----------
@@ -463,7 +432,7 @@ def make_one(tools, job, dest):
     row = {"sha256": sha, "slug": slug, "kind": kind, "source_archive": archive, "source_path": path,
            "root": str(dest), "made_at": time.strftime("%Y-%m-%d %H:%M:%S")}
     if kind == "placeholder":
-        pk = placeholder_kind(ext, mime, mac_type)
+        pk = placeholder_kind(ext, mime, mac_type, creator)
         row.update(method="placeholder", status="placeholder",
                    thumb=f"placeholder/{pk}.svg", preview=f"placeholder/{pk}.svg")
         return row
@@ -539,7 +508,7 @@ def make_one(tools, job, dest):
         except OSError:
             pass
     pk = "image" if kind in ("image", "postscript") else "document" if kind == "olddoc" \
-        else placeholder_kind(ext, mime, mac_type)
+        else placeholder_kind(ext, mime, mac_type, creator)
     row.update(method="none", status="failed", thumb=f"placeholder/{pk}.svg",
                preview=f"placeholder/{pk}.svg", error=" | ".join(errors) or "no tool available")
     return row

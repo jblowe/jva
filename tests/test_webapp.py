@@ -140,7 +140,8 @@ class Public(unittest.TestCase):
         sha = self.db.execute("SELECT sha256 FROM unique_files WHERE name='Burial 2.jpg'").fetchone()[0]
         t = self.c.get("/search").get_data(as_text=True)
         self.assertIn(f'src="/derivatives/thumb/{sha[:2]}/burial%202.webp"', t)
-        self.assertIn("/static/placeholder/", t)            # files without previews
+        self.assertIn("/static/placeholder/presentation.svg", t)    # files without previews: by sort
+        self.assertIn("/static/placeholder/text.svg", t)
         self.assertNotIn("/img/", t)
         t = self.c.get(f"/file/{sha}").get_data(as_text=True)
         self.assertIn(f"/derivatives/preview/{sha[:2]}/burial%202.webp", t)

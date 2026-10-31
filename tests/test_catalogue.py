@@ -90,6 +90,26 @@ class SearchPreparation(unittest.TestCase):
         self.assertEqual(sorted(tags_of("NPW86 sherds/TAP94.export")),
                          [("season", "86"), ("season", "94"), ("site", "npw")])
 
+    def test_placeholders(self):
+        from jva.kinds import PLACEHOLDERS, placeholder_for as pf
+        self.assertEqual(pf(".fp5", "", ""), "filemaker")
+        self.assertEqual(pf("", "", "FMPR", "FMPR"), "filemaker")                   # old Mac, no extension
+        self.assertEqual(pf("", "", "", "", "FileMaker Pro Database"), "filemaker")
+        self.assertEqual(pf(".mdb", "", ""), "database")
+        self.assertEqual(pf(".xls", "", ""), "spreadsheet")
+        self.assertEqual(pf("", "", "WDBN", "MSWD"), "word")
+        self.assertEqual(pf(".ppt", "", ""), "presentation")
+        self.assertEqual(pf("", "", "drw5", "DAD5"), "drawing")                      # Canvas
+        self.assertEqual(pf("", "", "TEXT", "ART5"), "image")                        # Illustrator PostScript
+        self.assertEqual(pf(".pmd", "", ""), "layout")
+        self.assertEqual(pf("", "", "OEDB", "MSNM"), "email")
+        self.assertEqual(pf(".zip", "", ""), "archive")
+        self.assertEqual(pf(".plist", "", ""), "settings")
+        self.assertEqual(pf(".js", "", ""), "web")
+        self.assertEqual(pf(".xyz", "", ""), "unknown")
+        here = Path(__file__).resolve().parents[1] / "webapp" / "static" / "placeholder"
+        self.assertEqual([n for n in PLACEHOLDERS if not (here / f"{n}.svg").exists()], [])
+
 
 if __name__ == "__main__":
     unittest.main()

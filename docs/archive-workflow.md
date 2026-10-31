@@ -342,8 +342,13 @@ derivatives are keyed on checksums.
   `%%BoundingBox` (Illustrator art often lies partly off its page), with the blank
   margins trimmed (`method` = `ghostscript`). PDF-based Illustrator files (version 9 on)
   are drawn like PDFs. Quick Look is never used for these: it shows PostScript as text.
-- **Everything else** gets a shared placeholder per kind (document, audio, archive, font,
-  application, database, code, drawing, unknown).
+- **Everything else** gets a shared placeholder picture for its sort of file: FileMaker
+  database, other database, spreadsheet, presentation, Word document, PDF, text, page layout,
+  web page, email, drawing, image, video, audio, archive, font, program, program code,
+  settings, or "File" when nothing more is known. `placeholder_for` in `jva/kinds.py` chooses
+  it; the pictures are `webapp/static/placeholder/*.svg`, with a caption naming the sort.
+  The search app chooses the picture itself from each file's extension, Mac type and format,
+  so better placeholders show up without rerunning this script.
 - **Reruns** only do what's missing, but files that got a placeholder in an earlier run
   and that the script can now render (the Canvas drawings, before it knew them) are
   redone automatically, as are Illustrator/EPS files that an earlier version previewed
@@ -355,7 +360,7 @@ checksum, in folders named by the first 2 characters (so no folder gets huge):
     derivatives/thumb/1b/anvils-2-for-jake-3-10-31-08-1ba0ca91f8.webp
     derivatives/preview/1b/anvils-2-for-jake-3-10-31-08-1ba0ca91f8.webp
     derivatives/pdf/1b/...pdf  and  derivatives/rtf/1b/...rtf    (old Word files only)
-    derivatives/placeholder/document.svg
+    derivatives/placeholder/filemaker.svg            (copies of the app's placeholders)
 
 The `derivatives` table in `archive_catalog.sqlite` has one row per distinct file:
 `sha256` (the same key as in `files` and `unique_files`), `slug`, `kind`, `method`
