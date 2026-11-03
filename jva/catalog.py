@@ -146,8 +146,10 @@ JUNK_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini", "Icon\r", ".localized", "
 
 
 # Folders whose whole contents are clutter: the classic Mac OS "System Folder" (also
-# "System Folder 9.2", "System Folder (old)", "System Folder copy", ...)
-CLUTTER_FOLDERS = re.compile(r"(^|/)System Folder(?: [^/]*)?/", re.I)
+# "System Folder 9.2", "System Folder (old)", "System Folder copy", ...), and the VIDEO_TS
+# and AUDIO_TS folders of DVDs copied to disk (raw DVD rips: .vob, .ifo, .bup; the videos
+# themselves are kept as .m4v)
+CLUTTER_FOLDERS = re.compile(r"(^|/)(System Folder(?: [^/]*)?|VIDEO_TS|AUDIO_TS)/", re.I)
 # File types whose files are all clutter: .m4a audio (iTunes music, students' recordings),
 # .xml (program settings and the like)
 CLUTTER_EXT = {".m4a", ".xml"}
@@ -170,7 +172,8 @@ def is_clutter(name, size, path=""):
 
 def mark_clutter_folders(db):
     """Mark files already catalogued in a CLUTTER_FOLDERS folder as clutter. -> how many."""
-    rows = db.execute("SELECT id, path FROM files WHERE junk = 0 AND path LIKE '%System Folder%/%'").fetchall()
+    rows = db.execute("SELECT id, path FROM files WHERE junk = 0 AND (path LIKE '%System Folder%/%' "
+                      "OR path LIKE '%VIDEO\\_TS/%' ESCAPE '\\' OR path LIKE '%AUDIO\\_TS/%' ESCAPE '\\')").fetchall()
     ids = [(i,) for i, p in rows if CLUTTER_FOLDERS.search(p)]
     db.executemany("UPDATE files SET junk = 1 WHERE id = ?", ids)
     return len(ids)
@@ -253,12 +256,56 @@ def mark_powerpoint_exports(db):
     return n
 
 
+CLUTTER_LIST = Path(__file__).resolve().parents[1] / "rules" / "clutter.csv"
+
+
+def load_clutter_list(path=CLUTTER_LIST):
+    """rules/clutter.csv -> [(compiled pattern, entry)]. Each entry in its "path" column is
+    a folder ("Memorex USB/China.Blue.[2005]/", ending in /), a file path ending a file's path
+    ("STORE N GO/Hot Rocks Peru.mp4"), or a bare file name ("The Ax Fight [700 MB].m4v"), all
+    without the drive; matched without regard to case, at folder boundaries."""
+    out = []
+    if not Path(path).exists():
+        return out
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        for r in csv.DictReader(fh):
+            e = (r.get("path") or "").strip()
+            if not e or e.startswith("#"):
+                continue
+            tail = "" if e.endswith("/") else "$"
+            out.append((re.compile(r"(^|/)" + re.escape(e.lower()) + tail), e))
+    return out
+
+
+def mark_listed_clutter(db, path=CLUTTER_LIST):
+    """Mark the files listed in rules/clutter.csv as clutter, and every other copy of the same
+    content wherever it is (a film copied into a course folder is the same film). -> how many."""
+    rules = load_clutter_list(path)
+    if not rules:
+        return 0
+    ids, shas = [], set()
+    for e in {e.rstrip("/").rsplit("/", 1)[-1].lower() for _, e in rules}:     # narrow by the last part
+        like = "%" + e.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        for i, p, sha in db.execute("SELECT id, path, sha256 FROM files WHERE junk = 0 AND lower(path) LIKE ? ESCAPE '\\'",
+                                    (like,)):
+            if any(rx.search(p.lower()) for rx, _ in rules):
+                ids.append((i,))
+                if sha:
+                    shas.add(sha)
+    db.executemany("UPDATE files SET junk = 1 WHERE id = ? AND junk = 0", ids)
+    n = len(set(ids))
+    for sha in shas:
+        n += db.execute("UPDATE files SET junk = 1 WHERE sha256 = ? AND junk = 0", (sha,)).rowcount
+    return n
+
+
 def apply_clutter_rules(db):
     """Apply the clutter rules to files already catalogued. -> [(how many, what)] for the rules
     that marked anything."""
     out = [(db.execute("UPDATE files SET junk = 1 WHERE junk = 0 AND substr(name, 1, 1) = '.'").rowcount,
             'hidden dot-files (mostly Mac "._" files)'),
-           (mark_clutter_folders(db), "files in Mac OS System Folders"),
+           (mark_clutter_folders(db), "files in DVD (VIDEO_TS) folders and Mac OS System Folders"),
            (mark_clutter_types(db), f"files of clutter types ({', '.join(sorted(CLUTTER_EXT))})"),
-           (mark_powerpoint_exports(db), "files in PowerPoint web exports")]
+           (mark_powerpoint_exports(db), "files in PowerPoint web exports"),
+           (mark_listed_clutter(db), "files listed in rules/clutter.csv (and their other copies)")]
     return [(n, what) for n, what in out if n]

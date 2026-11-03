@@ -215,12 +215,22 @@ Five steps, with progress on screen:
 | `appledouble_orphans.csv` | `._` files with nothing beside them: the file or folder they belong to isn't on the archive drive. Usually that file didn't make it onto the drive, or an empty folder (only files are listed) |
 
 System clutter (`.DS_Store`, `Thumbs.db`, empty files, and every hidden dot-file, above
-all the `._` files), everything in a Mac OS `System Folder`, every `.m4a` audio file (iTunes
-music and the like) and `.xml` file, and PowerPoint "Save as Web Page" exports (every file in a
-folder holding slide pages `sld001.htm`, `tsld001.htm`, ...) is catalogued but treated as
-clutter. The rules are `CLUTTER_FOLDERS`, `CLUTTER_EXT` and `POWERPOINT_PAGE` in
-`jva/catalog.py`; after changing them, run
-`python3 scripts/identify_archive.py --reports` to apply them to files already catalogued.
+all the `._` files), everything in a Mac OS `System Folder`, everything in a DVD's `VIDEO_TS`
+or `AUDIO_TS` folder (raw DVD rips: `.vob`, `.ifo`, `.bup`; the videos are kept as `.m4v`),
+every `.m4a` audio file (iTunes music and the like) and `.xml` file, and PowerPoint "Save as
+Web Page" exports (every file in a folder holding slide pages `sld001.htm`, `tsld001.htm`,
+...) is catalogued but treated as clutter. The rules are `CLUTTER_FOLDERS`, `CLUTTER_EXT` and
+`POWERPOINT_PAGE` in `jva/catalog.py`.
+
+Particular files and folders can be listed as clutter in `rules/clutter.csv` (columns `path`,
+`why`): a folder (ending in `/`), the end of a file's path, or a bare file name, without the
+drive name; case doesn't matter. Every other copy of a listed file's content counts as clutter
+too, wherever it is. The list holds the commercial films and documentaries kept for teaching
+(the `MP4 video library`, *China Blue*, *The Fast Runner*, NCFDD webinars, ...), which are
+copyrighted and don't belong in the archive.
+
+After changing any of these rules, run `python3 scripts/identify_archive.py --reports` to apply
+them to files already catalogued.
 Clutter isn't checksummed, never counts
 as a duplicate, and is left out of `unique_files`, the search app, the preview images and
 the subject classification. On exFAT drives each Mac file's type and creator codes and

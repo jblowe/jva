@@ -1,0 +1,30 @@
+path,why
+# Files and folders that count as clutter, besides the built-in rules in jva/catalog.py.
+# path: a folder (ending in /), the end of a file's path, or a bare file name; no drive name;
+# case doesn't matter. Every other copy of a listed file's content counts as clutter too.
+# identify_archive.py applies this list each time it runs.
+#
+# Commercial films and documentaries (copyrighted; Judy's teaching copies)
+jvbackup20/Edrive/MP4 video library/,downloaded documentaries and films
+Memorex USB/China.Blue.[2005]/,film: China Blue (2005)
+Memorex USB/The.Fast.Runner.2001/,film: The Fast Runner (2001)
+Memorex USB/Navaho.Film.Themselves.[2011]/,film: Navajo Film Themselves
+Faculty Development & Diversity Webinars/,NCFDD webinar recordings and handouts
+Chronicle.Of.a.Summer.1961.720p.mkv,film: Chronicle of a Summer (1961)
+STORE N GO/The Ghosts of Machu Picchu.mp4,NOVA documentary
+STORE N GO/Out of the Past 8 Collapse.mp4,documentary series
+STORE N GO/Hot Rocks Peru.mp4,BBC documentary
+Before_Silk_Unsolved_Mysteries_of_the_Silk_Road_by_Colin_Renfrew.mp4,recorded lecture
+The Ax Fight [700 MB].m4v,film: The Ax Fight (1975)
+Archeology - exploring the past with modern technology _ DW History Documentary .mp4,DW documentary
+Quest For The Lost City (Mayan History Documentary) _ Timeline.mp4,documentary
+What Was Ours - NA & Museums Independent Lens PBS Documentary 2017-1.mp4,PBS documentary
+Who Owns to the Past - Full Movie Snagfilms - YouTube.mp4,documentary
+The Way of All Flesh by Adam Curtis.mp4,BBC documentary
+Kennewick Man & Europeans In Ancient America PBS NOVA Full D.mp4,NOVA documentary
+Henrietta Lacks' 'Immortal' Impact on Medical Research.mp4,news video
+Henrietta Lacks Her Impact and Our Outreach.mp4,recorded talk
+Rebecca Skloot @ 5x15 - Story of HeLa Cells.mp4,recorded talk
+Rebecca Skloot explains how she writes about science.mp4,recorded talk
+"Alice Kober, Forgotten Genius.mp4",documentary
+Myth_of_Naro__Dedeheiwa__Yanomamo__-_PREVIEW.mp4,film preview

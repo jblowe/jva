@@ -78,6 +78,8 @@ class SystemFolder(unittest.TestCase):
         self.assertTrue(is_clutter("01 Highway Blues.M4A", 10, "My Music/01 Highway Blues.M4A"))
         self.assertTrue(is_clutter("settings.XML", 10, "a/settings.XML"))
         self.assertTrue(is_clutter("sld012.htm", 10, "a/talk_files/sld012.htm"))
+        self.assertTrue(is_clutter("VTS_01_1.VOB", 10, "a/Tape 7/VIDEO_TS/VTS_01_1.VOB"))
+        self.assertFalse(is_clutter("Tape 7.m4v", 10, "a/Tape 7/Tape 7.m4v"))
         root, config = H.make_archive()
         sysf = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "OLD MAC" / "System Folder" / "Extensions"
         sysf.mkdir(parents=True)
@@ -105,6 +107,23 @@ class SystemFolder(unittest.TestCase):
         self.assertEqual(db.execute("SELECT junk FROM files WHERE name = 'song.m4a'").fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT name, junk, unique_id FROM files WHERE path LIKE '%System Folder%' "
                                     "ORDER BY name").fetchall(), [("Finder", 1, None), ("QuickTime", 1, None)])
+
+    def test_clutter_list(self):
+        from jva.catalog import mark_listed_clutter
+        root, config = H.make_archive()
+        db = H.connect(config)
+        rules = root / "clutter.csv"
+        rules.write_text("path,why\n# a comment, with a comma\nNPW 1986/,a folder\nmisc/notes.TXT,end of a path\n"
+                         "case 3.jpg,a bare name\nWorld Trip/China,not a whole folder name: no match\n")
+        n = mark_listed_clutter(db, rules)
+        junk = {r[0] for r in db.execute("SELECT path FROM files WHERE junk = 1 AND name NOT LIKE '.%'")}
+        self.assertIn("CumulativeArchive/JUDY/NPW 1986/Burial 2.jpg", junk)
+        self.assertIn("CumulativeArchive/THAI 2008/copies/Burial 2 copy.jpg", junk)    # the same content elsewhere
+        self.assertIn("CumulativeArchive/THAI 2008/misc/notes.txt", junk)
+        self.assertIn("CumulativeArchive/JUDY/Museum displays/case 3.jpg", junk)
+        self.assertNotIn("CumulativeArchive/JUDY/World Trip/China 1/img1.jpg", junk)
+        self.assertEqual(n, 5)                                # Burial 2 on both drives, its copy, notes, case 3
+        self.assertEqual(mark_listed_clutter(db, rules), 0)  # nothing more the second time
 
 
 if __name__ == "__main__":
