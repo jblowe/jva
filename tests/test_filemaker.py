@@ -53,7 +53,8 @@ class FileMakerToCSV(unittest.TestCase):
         self.assertEqual((index[1]["csv_file"], index[1]["note"]), ("", "no CSV: the same data as Government Types.csv"))
         self.assertIn("1 tables with the same data", r.stdout)
         self.assertIn("FileMaker Pro 1 or 2", index[2]["note"])
-        self.assertEqual(sorted(p.name for p in out.iterdir()), ["Government Types.csv", "_index.csv", "mine.txt"])
+        self.assertEqual(sorted(p.name for p in out.iterdir()), ["Government Types.csv", "_index.csv",
+                                                              "_numbers.csv", "_numbers_values.csv", "mine.txt"])
 
 
 if __name__ == "__main__":

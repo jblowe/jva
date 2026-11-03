@@ -25,6 +25,13 @@ needed by Python's csv module. FileMaker's line breaks inside a field (carriage 
 become ordinary line breaks inside the quoted value; other control characters become spaces.
 Pictures in container fields are not extracted.
 
+Measurement columns are made plain numbers (jva/fm_numbers.py; --raw leaves them as written):
+FileMaker number fields take any text, and "60%", "2.5 cm", "≈12 cm", ">4.42" or "80-85%" were
+often typed. Such a column gets the best guess at the number (60, 2.5, 12, 4.42, 82.5), in the
+column's unit, and a new column <column>_original beside it with what was written.
+_numbers.csv and _numbers_values.csv list the columns and values changed, for checking.
+scripts/fm_numbers.py does the same to CSVs already written.
+
 Not readable: FileMaker Pro 1 and 2 files (older than the fp3 format), and databases with a
 password. Those are listed in _index.csv; old FileMaker (3 to 6) can convert the first kind.
 
@@ -47,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repositor
 from jva.config import CONFIG  # noqa: E402
 from jva.catalog import columns, connect, log  # noqa: E402
 from jva.kinds import is_filemaker  # noqa: E402
+from jva.fm_numbers import fix_csv, summary, write_reports  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 FMPTOOLS = REPO / "third_party" / "fmptools"
@@ -168,6 +176,8 @@ def main():
     ap.add_argument("-o", "--out", default="~/jva_fm", help="the folder for the CSVs (default ~/jva_fm)")
     ap.add_argument("--keep-duplicates", action="store_true",
                     help="write a CSV for every table, even when another has exactly the same data")
+    ap.add_argument("--raw", action="store_true",
+                    help="leave measurement columns as written (no plain numbers, no _original columns)")
     ap.add_argument("--catalogue", default=str(CONFIG.catalogue))
     a = ap.parse_args()
     tool = build_tool()
@@ -177,7 +187,7 @@ def main():
     db = connect(a.catalogue, readonly=True)
     docs = filemaker_files(db)
     log(f"{len(docs):,} distinct FileMaker databases in the catalogue")
-    used, written, index, n_records, n_ok = {}, {}, [], 0, 0
+    used, written, index, n_records, n_ok, numbers = {}, {}, [], 0, 0, {}
     with tempfile.TemporaryDirectory() as work:
         for i, d in enumerate(docs, 1):
             paths, where = copies_of(db, d["uid"], CONFIG.volumes_root)
@@ -211,6 +221,10 @@ def main():
                 fname = f"{stem}.csv" if used[k] == 1 else f"{stem} ({used[k]}).csv"
                 shutil.move(str(tmp), out / fname)
                 written[digest] = fname
+                if not a.raw:
+                    changed = fix_csv(out / fname)
+                    if changed:
+                        numbers[fname] = changed
                 n_records += recs
                 index.append([fname, d["name"], t, recs, fields, *row[1:], ""])
             cdb.close()
@@ -223,12 +237,16 @@ def main():
         w.writerow(["csv_file", "database", "table", "records", "fields", "where the database is (one copy)",
                     "copies", "sha256", "note"])
         w.writerows(index)
+    if not a.raw:
+        write_reports(out, numbers)
     n_csv = sum(1 for r in index if r[0])
     n_empty = sum(1 for r in index if r[-1] == "no CSV: the table has no records")
     n_dup = sum(1 for r in index if r[-1].startswith("no CSV: the same data"))
     print(f"Wrote {n_csv:,} CSV files ({n_records:,} records) from {n_ok:,} of {len(docs):,} FileMaker "
           f"databases into {out}; left out {n_empty:,} empty tables and {n_dup:,} tables with the same data "
           f"as another; {len(docs) - n_ok:,} databases couldn't be read (see {INDEX}).")
+    if not a.raw:
+        print(summary(numbers) + ".")
 
 
 if __name__ == "__main__":
