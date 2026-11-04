@@ -42,6 +42,7 @@ SCRIPTS = Path(__file__).resolve().parent
 from jva.catalog import TIFF_REPAIRS  # noqa: E402
 from jva.tiff import apply_fixes, check_tiff, move_checksum, plan_fixes, sha256_file, undo_fixes  # noqa: E402
 from jva import volumes  # noqa: E402
+from jva.offload import not_offloaded  # noqa: E402
 
 VOLUMES = CONFIG.volumes_root
 SCHEMA = TIFF_REPAIRS
@@ -74,8 +75,8 @@ def main():
     others = len(rows) - len(shas)
     work, absent = [], 0
     for sha in dict.fromkeys(shas):
-        copies = db.execute("SELECT archive, path FROM files WHERE sha256=? AND junk=0 ORDER BY archive, path",
-                            (sha,)).fetchall()
+        copies = db.execute("SELECT archive, path FROM files WHERE sha256=? AND junk=0"
+                            + not_offloaded(db, "files") + " ORDER BY archive, path", (sha,)).fetchall()
         here = [c for c in copies if mounted(c[0])]
         absent += len(copies) - len(here)
         if here:

@@ -22,7 +22,7 @@ from jva.search_prep import prepare
 
 PUBLIC_NAME = "archive_public.sqlite"
 LIST_NAME = "derivatives_files.txt"
-DROP_TABLES = ("removed_copies", "deleted_files", "tiff_repairs",
+DROP_TABLES = ("removed_copies", "deleted_files", "tiff_repairs", "offloaded",
                "unique_archives", "unique_drives", "unique_tags", "search_meta")   # helpers rebuilt
 DERIVATIVE_FILES = ("thumb", "preview", "pdf", "rtf")
 

@@ -77,6 +77,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repositor
 from jva.config import CONFIG  # noqa: E402
 from jva import volumes  # noqa: E402
 from jva.catalog import DERIVATIVES  # noqa: E402
+from jva.offload import not_offloaded  # noqa: E402
 from jva.kinds import (DRAWING_EXT, DRAWING_MAC, IMAGE_EXT, IMAGE_MAC, OLD_DOC_MAC, PS_EXT,  # noqa: E402
                        PLACEHOLDERS, PS_MAC, WORD_MAC, placeholder_for)
 
@@ -577,7 +578,7 @@ def main():
                  (SELECT u.name FROM unique_files u WHERE u.sha256 = f.sha256) uname,
                  d.status dstatus, d.thumb dthumb, d.method dmethod
           FROM files f LEFT JOIN derivatives d ON d.sha256 = f.sha256
-          WHERE f.archive=? AND f.junk=0 AND f.sha256 IS NOT NULL AND substr(f.name, 1, 2) <> '._'
+          WHERE f.archive=? AND f.junk=0 AND f.sha256 IS NOT NULL AND substr(f.name, 1, 2) <> '._'{not_offloaded(db, "f")}
             AND (d.status IS NULL OR d.status NOT IN {skip}
                  OR d.method = 'quicklook'
                  OR (d.status = 'failed' AND d.error LIKE 'quicklook:%')){only_sql}

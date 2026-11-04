@@ -522,14 +522,15 @@ def file_rows(files_csv):
 
 def removed_copies(outdir, archive):
     """Paths (relative to the archive volume) that free_space.py removed as extra copies, or
-    that delete_files.py / the search app deleted -- a --redo must not copy them back."""
+    that delete_files.py / the search app deleted, or that offload_files.py moved to S3 --
+    a --redo must not copy them back."""
     p = outdir / "archive_catalog.sqlite"
     if not p.exists():
         return set()
     out = set()
     try:
         with connect(p, readonly=True) as db:
-            for table in ("removed_copies", "deleted_files"):
+            for table in ("removed_copies", "deleted_files", "offloaded"):
                 if has_table(db, table):
                     out |= {r[0] for r in db.execute(f"SELECT path FROM {table} WHERE archive=?", (archive,))}
     except sqlite3.Error:

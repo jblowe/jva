@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repositor
 from jva.config import CONFIG  # noqa: E402
 from jva.tiff import check_tiff  # noqa: E402
 from jva import volumes  # noqa: E402
+from jva.offload import not_offloaded  # noqa: E402
 PROJECT_DIR = CONFIG.data_dir             # catalogue, reports and drive records
 VOLUMES = CONFIG.volumes_root
 
@@ -53,10 +54,10 @@ def main():
     if not mounted:
         sys.exit("No archive drive from the catalogue is plugged in." if not a.archive
                  else f'"{a.archive}" is not plugged in.')
-    rows = db.execute("""
+    rows = db.execute(f"""
         SELECT f.sha256, f.archive, f.path, f.size, u.copies, COALESCE(u.category, '')
         FROM files f LEFT JOIN unique_files u ON u.id = f.unique_id
-        WHERE f.junk = 0 AND f.sha256 IS NOT NULL AND substr(f.name, 1, 2) <> '._'
+        WHERE f.junk = 0 AND f.sha256 IS NOT NULL AND substr(f.name, 1, 2) <> '._'{not_offloaded(db, "f")}
           AND (lower(f.ext) IN ('.tif', '.tiff') OR f.mac_type = 'TIFF' OR f.mime = 'image/tiff'
                OR f.puid IN ('fmt/353', 'fmt/152', 'fmt/153', 'fmt/154', 'fmt/155', 'fmt/156',
                              'x-fmt/387', 'x-fmt/388', 'x-fmt/399'))

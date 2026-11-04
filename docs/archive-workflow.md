@@ -501,6 +501,41 @@ left, reason, date, and whether it was this script or the search app), and
 buttons do the same, one copy or all copies at a time. Deleting is permanent: exFAT drives
 have no Trash.
 
+## Moving files to S3 Glacier ("offloading")
+
+    python3 scripts/offload_files.py MANIFEST --bucket NAME --verified FOLDER            # dry run
+    python3 scripts/offload_files.py MANIFEST --bucket NAME --verified FOLDER --apply
+
+For files that are rarely needed but must be kept, such as the TIFF masters behind the JPEGs:
+once a file is safely in Amazon S3 (Glacier Deep Archive), its copies on the archive drives
+can be replaced by **stubs** to free the space, while the file stays in the catalogue and the
+search app with its preview images.
+
+- `MANIFEST` is a CSV with one row per distinct file that was uploaded: `sha256`, `archive`,
+  `path` (the copy that was uploaded) and `s3_key` (its key in the bucket).
+- `--verified FOLDER` holds what `rclone check --match` wrote: `matched_<archive>.txt` (spaces
+  in the archive name as `_`), the paths whose upload rclone found identical. **Only files
+  listed there are offloaded**, so run the check after the upload and before this.
+- For each of them, every copy in the catalogue (identical by checksum, on any archive drive)
+  is offloaded, if its drive is plugged in and the copy still has the size and date in the
+  catalogue. The file is replaced by a short text file of the same name whose first line is
+  its S3 location (`s3://NAME/<key>`); its `._` companion stays. Copies that can't be checked
+  are skipped and listed in `offload_plan.csv`: plug in the drive and run again (copies already
+  offloaded are skipped).
+- Each copy is recorded in the `offloaded` table (path, checksum, size, date, S3 location,
+  storage class, when). Its row in `files` stays as it is, so `unique_files`, the
+  classification, the preview images and the search app are unchanged; the search app shows
+  "in Amazon S3 ... since ..." under the copy, and opening the original explains that it
+  must be restored first (12 to 48 hours from Deep Archive).
+- The other scripts leave offloaded copies alone: `identify_archive.py` keeps their rows (and
+  if the real file is put back, with its catalogued size, it stops counting as offloaded),
+  `drive_inventory.py --redo` never copies them back, and `free_space.py`,
+  `make_derivatives.py`, `check_tiffs.py` and `repair_tiffs.py` never use them. Deleting an
+  offloaded copy with `delete_files.py` deletes the stub and its record; the copy in S3 stays.
+  `find_documents.py`, `word_report.py` and `filemaker_to_csv.py` don't check: they read
+  documents, so don't offload documents they need.
+- The public catalogue (`publish.py`) leaves the `offloaded` table out.
+
 ## Damaged TIFFs
 
     python3 scripts/check_tiffs.py        # reads only; writes tiff_check.csv

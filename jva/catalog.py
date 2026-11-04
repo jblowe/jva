@@ -7,6 +7,7 @@ Tables, and which script fills them:
   derivatives              make_derivatives.py   preview images, PDF/RTF copies
   removed_copies           free_space.py         extra copies removed to save space
   deleted_files            delete_files.py, the search app   files deleted on purpose
+  offloaded                offload_files.py      copies moved to S3 Glacier (stubs left; see jva/offload.py)
   tiff_repairs             repair_tiffs.py       bytes changed in damaged TIFFs (for --undo)
   file_groups              jva/similar.py (with unique_files)   similar files grouped together
   unique_archives, unique_drives, unique_tags, search_meta, unique_files.kind

@@ -52,6 +52,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repositor
 from jva.config import CONFIG  # noqa: E402
 from jva import volumes  # noqa: E402
 from jva.catalog import REMOVED_COPIES, log  # noqa: E402
+from jva.offload import not_offloaded  # noqa: E402
 from jva.macfiles import make_xattr_reader  # noqa: E402
 
 PROJECT_DIR = str(CONFIG.data_dir)       # catalogue, reports and drive records
@@ -87,13 +88,15 @@ def keeper_rank(path, mtime, catmap):
 
 def plan(db, archive, min_bytes, catmap):
     """Extra copies on this drive, largest first:
-    (size, sha, path, mtime, modified, created, drive, keep_path)"""
-    rows = db.execute("""
+    (size, sha, path, mtime, modified, created, drive, keep_path). Offloaded copies (stubs of
+    files moved to S3 by offload_files.py) are left out."""
+    off_f, off_all = not_offloaded(db, "f"), not_offloaded(db, "files")
+    rows = db.execute(f"""
         SELECT f.sha256, f.size, f.path, f.mtime, f.modified, f.created, f.drive
         FROM files f
-        WHERE f.archive=? AND f.junk=0 AND f.size >= ? AND substr(f.name, 1, 2) <> '._'
+        WHERE f.archive=? AND f.junk=0 AND f.size >= ? AND substr(f.name, 1, 2) <> '._'{off_f}
           AND f.sha256 IN (SELECT sha256 FROM files WHERE archive=? AND junk=0 AND sha256 IS NOT NULL
-                           AND substr(name, 1, 2) <> '._' GROUP BY sha256 HAVING COUNT(*) > 1)""",
+                           AND substr(name, 1, 2) <> '._'{off_all} GROUP BY sha256 HAVING COUNT(*) > 1)""",
                       (archive, min_bytes, archive)).fetchall()
     groups = {}
     for r in rows:

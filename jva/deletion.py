@@ -110,6 +110,8 @@ def _catalogue_rows_gone(db, archive, paths):
     db.executemany("DELETE FROM files WHERE archive=? AND path=?", [(archive, p) for p in paths])
     if has_table(db, "file_class"):
         db.executemany("DELETE FROM file_class WHERE archive=? AND path=?", [(archive, p) for p in paths])
+    if has_table(db, "offloaded"):              # its stub was deleted; the S3 copy is not touched
+        db.executemany("DELETE FROM offloaded WHERE archive=? AND path=?", [(archive, p) for p in paths])
 
 
 def remove_empty_folders(db, archive, rel_dir, volumes_root=None):

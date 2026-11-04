@@ -66,6 +66,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the repository, for jva
 from jva.config import CONFIG  # noqa: E402
+from jva import offload  # noqa: E402
 from jva.catalog import (FILE_COLS, FILES as SCHEMA, apply_clutter_rules, gb, is_clutter, log,  # noqa: E402
                         write_csv)
 from jva.search_prep import prepare  # noqa: E402
@@ -240,6 +241,8 @@ STUB_MAX = 4096        # a stub only holds a path
 def scan(db, archive, root, sdirs):
     xattr = make_xattr_reader()
     stubs = removed_paths(db, archive)
+    offloaded = offload.paths(db, archive)      # in S3: keep their rows as they are
+    restored = []
     units = sorted(p.name for p in root.iterdir()
                    if p.is_dir() and not p.is_symlink() and p.name not in SKIP_DIRS
                    and not (p / DERIV_MARKER).exists())
@@ -257,6 +260,10 @@ def scan(db, archive, root, sdirs):
         for full, name, st in walk_files(top, recursive=bool(unit)):
             rel = os.path.relpath(full, root)
             seen.add(rel)
+            if rel in offloaded:
+                if rel not in known or st.st_size != known[rel][0]:
+                    continue                                # the stub of an offloaded copy
+                restored.append((archive, rel))             # the real file is back (its size again)
             created = _created(st)
             if known.get(rel) == (st.st_size, st.st_mtime):  # unchanged since last run
                 if rel in no_created and created:
@@ -276,7 +283,7 @@ def scan(db, archive, root, sdirs):
                 log(f"   {unit or '(volume root)'}: {n_new:,} new/changed files so far ...")
         _insert(db, batch)
         _fill_created(db, fill)
-        gone = [(archive, p) for p in known if p not in seen]
+        gone = [(archive, p) for p in known if p not in seen and p not in offloaded]
         db.executemany("DELETE FROM files WHERE archive=? AND path=?", gone)
         db.commit()
         total_new += n_new
@@ -284,6 +291,9 @@ def scan(db, archive, root, sdirs):
         if seen or gone:
             log(f"   {unit or '(volume root)'}: {len(seen):,} files ({n_new:,} new/changed, "
                 f"{len(gone):,} removed) in {time.time() - t0:.0f}s")
+    if restored:
+        db.executemany("DELETE FROM offloaded WHERE archive=? AND path=?", restored)
+        log(f"   {len(restored):,} offloaded files are back on the drive: no longer counted as offloaded")
     # top-level folders that are gone from THIS volume (other volumes are never touched)
     for (u,) in db.execute("SELECT DISTINCT unit FROM files WHERE archive=?", (archive,)).fetchall():
         if u != ROOT_UNIT and u not in units:

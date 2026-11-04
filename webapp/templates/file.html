@@ -52,7 +52,8 @@
       <tr class="rel-identical">
         <td>{{ c.archive }}</td>
         <td>{{ c.drive }}</td>
-        <td class="path">{{ c.path }}</td>
+        <td class="path">{{ c.path }}{% set o = offloaded.get((c.archive, c.path)) %}{% if o %}
+          <div class="muted">in Amazon S3 ({{ o.storage_class }}) since {{ o.offloaded_at[:10] }}: {{ o.location }}</div>{% endif %}</td>
         <td>{{ c.modified }}</td>
         {% if CFG.mode == 'local' %}
         <td class="actions">

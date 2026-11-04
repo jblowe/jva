@@ -420,6 +420,11 @@ def file_page(key):
     if u["sha256"] and has_table("removed_copies"):
         removed = con.execute("SELECT archive, path, removed_at, kept_path FROM removed_copies "
                               "WHERE sha256=? ORDER BY archive, path", (u["sha256"],)).fetchall()
+    offloaded = {}
+    if u["sha256"] and has_table("offloaded"):
+        offloaded = {(r["archive"], r["path"]): r for r in con.execute(
+            "SELECT archive, path, location, storage_class, offloaded_at FROM offloaded WHERE sha256=?",
+            (u["sha256"],))}
     deriv = None
     if u["sha256"] and has_table("derivatives"):
         deriv = con.execute("SELECT * FROM derivatives WHERE sha256=?", (u["sha256"],)).fetchone()
@@ -457,6 +462,7 @@ def file_page(key):
         if full is not None:
             orig = {"inline": original_type(u) in INLINE_TYPES}
     return render_template("file.html", u=u, copies=copies, why=why, by_copy=by_copy, removed=removed,
+                           offloaded=offloaded,
                            deriv=deriv, neighbours=neighbours, vols=vols, folder=folder, orig=orig, group=group,
                            kind=kind_of(u["ext"], u["mime"], u["mac_type"], u["mac_creator"], u["format"]))
 
@@ -567,6 +573,14 @@ def original_copy(u):
     return None, None
 
 
+def con_offloaded(u):
+    """Where an offloaded file is in S3 (a row of `offloaded`), or None."""
+    if not u["sha256"] or not has_table("offloaded"):
+        return None
+    return db().execute("SELECT location, storage_class FROM offloaded WHERE sha256=? LIMIT 1",
+                        (u["sha256"],)).fetchone()
+
+
 def original_type(u):
     mime = (u["mime"] or "").split(";")[0].strip() or mimetypes.guess_type(u["name"])[0] or ""
     if not mime and (u["mac_type"] or "") == "PDF ":
@@ -588,6 +602,10 @@ def original(key):
         abort(404)
     full, _ = original_copy(u)
     if full is None:
+        off = con_offloaded(u)
+        if off:
+            abort(404, f"This file is in Amazon S3 ({off['storage_class']}) at {off['location']}; "
+                       "it must be restored from there (12 to 48 hours) before it can be opened.")
         abort(404, "None of the archive drives with a copy of this file is plugged in.")
     mime = original_type(u)
     inline = mime in INLINE_TYPES and not request.args.get("download")
