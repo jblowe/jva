@@ -5,6 +5,7 @@ Tables, and which script fills them:
   unique_files, unique_search   identify_archive.py (jva.unique)   one row per distinct file
   file_class, content_class     classify_archive.py   subject categories
   derivatives              make_derivatives.py   preview images, PDF/RTF copies
+  originals                copy_originals.py     downloadable copies of documents in the derivatives folder
   removed_copies           free_space.py         extra copies removed to save space
   deleted_files            delete_files.py, the search app   files deleted on purpose
   offloaded                offload_files.py      copies moved to S3 Glacier (stubs left; see jva/offload.py)
@@ -105,6 +106,14 @@ CREATE TABLE IF NOT EXISTS derivatives(
   source_archive TEXT, source_path TEXT,   -- the copy it was made from
   error TEXT, made_at TEXT);
 CREATE INDEX IF NOT EXISTS i_der_status ON derivatives(status);
+"""
+
+ORIGINALS = """
+CREATE TABLE IF NOT EXISTS originals(
+  sha256 TEXT PRIMARY KEY,      -- the distinct file (unique_files.sha256)
+  rel TEXT,                     -- its copy, relative to the derivatives folder:
+                                -- originals/<archive>/<path>  (scripts/copy_originals.py)
+  size INTEGER, copied_at TEXT);
 """
 
 REMOVED_COPIES = """

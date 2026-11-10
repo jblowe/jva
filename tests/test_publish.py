@@ -40,6 +40,14 @@ def setUpModule():
         db.execute("INSERT INTO derivatives(sha256, slug, kind, status, root, thumb, preview, pdf) "
                    "VALUES (?, ?, 'image', 'made', ?, ?, ?, ?)",
                    (sha, name, str(DERIV), rel["thumb"], rel["preview"], pdf))
+    from jva.catalog import ORIGINALS
+    db.executescript(ORIGINALS)
+    for name, there in (("Burial 2.jpg", True), ("lecture.ppt", True), ("notes.txt", False)):
+        rel = f"originals/ARCH1/{name}"
+        if there:
+            (DERIV / rel).parent.mkdir(parents=True, exist_ok=True)
+            (DERIV / rel).write_bytes(b"x" * 10)
+        db.execute("INSERT INTO originals(sha256, rel, size) VALUES (?, ?, 10)", (SHA[name], rel))
     db.execute("INSERT INTO removed_copies(archive, path) VALUES ('ARCH1', 'gone.jpg')")
     db.execute("INSERT INTO deleted_files(archive, path) VALUES ('ARCH1', 'deleted.jpg')")
     db.commit()
@@ -81,7 +89,15 @@ class PublicCatalogue(unittest.TestCase):
         self.assertEqual(st, {SHA["Burial 2.jpg"]: "made", SHA["sherd.tif"]: "missing"})
         listed = set((ROOT / "public" / "derivatives_files.txt").read_text().splitlines())
         b = SHA["Burial 2.jpg"][:2]
-        self.assertEqual(listed, {f"preview/{b}/Burial 2.jpg.webp", f"thumb/{b}/Burial 2.jpg.webp"})
+        self.assertEqual({x for x in listed if not x.startswith("originals/")},
+                         {f"preview/{b}/Burial 2.jpg.webp", f"thumb/{b}/Burial 2.jpg.webp"})
+
+    def test_originals(self):
+        listed = set((ROOT / "public" / "derivatives_files.txt").read_text().splitlines())
+        self.assertIn("originals/ARCH1/Burial 2.jpg", listed)           # TAP, and its copy is there
+        self.assertNotIn("originals/ARCH1/lecture.ppt", listed)         # Class: left out
+        self.assertNotIn("originals/ARCH1/notes.txt", listed)           # its copy isn't there
+        self.assertEqual([r[0] for r in PUB.execute("SELECT rel FROM originals")], ["originals/ARCH1/Burial 2.jpg"])
 
     def test_app_on_public_catalogue(self):
         cfg = json.loads(CONFIG.read_text())

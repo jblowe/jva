@@ -457,10 +457,8 @@ def file_page(key):
             group = {"label": g["label"], "members": members, "count": g["members"],
                      "main": g["group_id"] == u["id"]}
     orig = None
-    if serves_originals():
-        full, _ = original_copy(u)
-        if full is not None:
-            orig = {"inline": original_type(u) in INLINE_TYPES}
+    if (serves_originals() and original_copy(u)[0] is not None) or originals_copy(u) is not None:
+        orig = {"inline": original_type(u) in INLINE_TYPES}
     return render_template("file.html", u=u, copies=copies, why=why, by_copy=by_copy, removed=removed,
                            offloaded=offloaded,
                            deriv=deriv, neighbours=neighbours, vols=vols, folder=folder, orig=orig, group=group,
@@ -591,17 +589,58 @@ def original_type(u):
 app.jinja_env.globals["serves_originals"] = serves_originals()
 
 
+def originals_copy(u):
+    """The copy of this file kept in the derivatives folder for downloading (table
+    `originals`, made by copy_originals.py), or None. Both modes use it: the public site has
+    no other, and on the Mac it stands in when no archive drive with a copy is plugged in."""
+    if not u["sha256"] or not has_table("originals"):
+        return None
+    r = db().execute("SELECT rel, size FROM originals WHERE sha256 = ?", (u["sha256"],)).fetchone()
+    if r is None or not r["rel"]:
+        return None
+    for root in CFG["derivatives_roots"]:
+        p = Path(root) / r["rel"]
+        try:
+            if root and p.is_file() and p.stat().st_size == r["size"]:
+                return p
+        except OSError:
+            continue
+    return None
+
+
+# extensions for files that have none (old Mac files knew their type from the Mac type code)
+EXT_FOR_MIME = {"application/msword": ".doc", "application/pdf": ".pdf", "application/rtf": ".rtf",
+                "text/rtf": ".rtf", "application/vnd.ms-excel": ".xls", "text/plain": ".txt"}
+EXT_FOR_KIND = {"MS Word": ".doc", "PDF": ".pdf", "Spreadsheet": ".xls", "Text": ".txt"}
+
+
+def download_name(u):
+    """The file's name, with an extension added if it has none, so it opens on today's computers."""
+    name = u["name"] or "file"
+    if os.path.splitext(name)[1]:
+        return name
+    t = u["mac_type"] or ""
+    if t.startswith("FMP"):
+        return name + (".fp" + t[3] if t[3:4] in ("3", "5", "7") else ".fp3")
+    mime = (u["mime"] or "").split(";")[0].strip()
+    ext = EXT_FOR_MIME.get(mime) or EXT_FOR_KIND.get(kind_of(u["ext"], u["mime"], t, u["mac_creator"], u["format"]))
+    return name + ext if ext else name
+
+
 def original(key):
-    """The original file itself, from whichever plugged-in archive drive has a copy.
+    """The original file itself: on the Mac from whichever plugged-in archive drive has a
+    copy, else (and on the public site) the copy in the derivatives folder (copy_originals.py).
     ?download=1 always downloads; otherwise PDFs, pictures, plain text and common audio/video
     open in the browser."""
-    if not serves_originals():
-        abort(404)
     u = unique_row(key)
     if u is None or (u["category"] or "Unclassified") in CFG["hide_categories"]:
         abort(404)
-    full, _ = original_copy(u)
+    full = original_copy(u)[0] if serves_originals() else None
     if full is None:
+        full = originals_copy(u)
+    if full is None:
+        if not serves_originals():
+            abort(404)
         off = con_offloaded(u)
         if off:
             abort(404, f"This file is in Amazon S3 ({off['storage_class']}) at {off['location']}; "
@@ -609,8 +648,11 @@ def original(key):
         abort(404, "None of the archive drives with a copy of this file is plugged in.")
     mime = original_type(u)
     inline = mime in INLINE_TYPES and not request.args.get("download")
-    return send_file(full, mimetype=mime, as_attachment=not inline, download_name=u["name"],
-                     conditional=True, max_age=0)
+    return send_file(full, mimetype=mime, as_attachment=not inline, download_name=download_name(u),
+                     conditional=True, max_age=0 if serves_originals() else 86400)
+
+
+app.add_url_rule("/original/<key>", view_func=original)
 
 
 @app.route("/doc/<fmt>/<key>")
@@ -641,7 +683,6 @@ def document(fmt, key):
 if LOCAL:
     app.add_url_rule("/reveal", view_func=reveal, methods=["POST"])
     app.add_url_rule("/delete", view_func=delete, methods=["POST"])
-    app.add_url_rule("/original/<key>", view_func=original)
 
 
 def _field(r, k):

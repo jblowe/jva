@@ -32,7 +32,7 @@ balancer has the certificate), gunicorn on 127.0.0.1:8007 via systemd unit `jva`
   kinds.py (file kinds incl. MS Word/Presentation/Spreadsheet/Database..., SITES, SEASONS, RULES_VERSION), volumes.py, deletion.py, tiff.py, publish.py, offload.py (files moved to S3 Glacier: stubs on the drives, rows kept; table offloaded)
 - `scripts/`: drive_inventory, identify_archive (scan, hash, Siegfried, unique, groups, reports,
   prepare), classify_archive (+ rules/classify_rules.csv), make_derivatives, free_space,
-  delete_files, offload_files, check_tiffs, repair_tiffs, prepare_search, publish, time_queries, and reports:
+  delete_files, offload_files, copy_originals (one copy of each Word/PDF/spreadsheet/database in <derivatives>/originals/<archive>/<path>, table originals; publish.py uploads them, the app's Download uses them in both modes), check_tiffs, repair_tiffs, prepare_search, publish, time_queries, and reports:
   date_report (creation_dates.xlsx), word_report (word_documents.xlsx), similar_report
   (similar_files.xlsx), filemaker_to_csv (~/jva_fm; vendored third_party/fmptools; measurement columns made plain numbers
   with <column>_original beside them, rules in jva/fm_numbers.py, scripts/fm_numbers.py for CSVs already written); find_documents (finds documents by their title pages, searches in

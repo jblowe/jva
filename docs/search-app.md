@@ -73,7 +73,8 @@ python3 scripts/time_queries.py --cat TAP --q anvil
   for similar (other versions of the same object), with the reason each one is there.
   **Open** / **Download** under the preview fetch the original file itself from whichever
   archive drive with a copy is plugged in (PDFs, pictures and plain text open in the browser;
-  everything else downloads). Old Word files also get **Open PDF** / **Download RTF**: whole-
+  everything else downloads), or else from the copy `copy_originals.py` put in the derivatives
+  folder's `originals/` (MS Word, PDF, spreadsheets, databases). Old Word files also get **Open PDF** / **Download RTF**: whole-
   document copies made by `make_derivatives.py`. **Delete** (on each copy) and **Delete all
   copies** remove files from the archive drives after you confirm, the same way as
   `scripts/delete_files.py` (see `archive-workflow.md`): the catalogue is updated at once. They show only in local mode, for
@@ -92,7 +93,7 @@ or `archive_catalog.sqlite` in `data_dir`), and `volumes_root` is shared with th
 
 | Setting | Meaning |
 |---|---|
-| `mode` | `"local"`: Reveal in Finder, drive status, originals, Delete. `"public"`: none of those -- the routes don't exist (the web server) |
+| `mode` | `"local"`: Reveal in Finder, drive status, originals from the drives, Delete. `"public"`: none of those -- the routes don't exist (the web server); only the copies in `originals/` can be downloaded |
 | `derivatives_roots` | folders to look in for preview images, in order. The location each image was made in is always tried last. **When you move the derivatives folder, add its new location here.** |
 | `derivatives_url` | public mode: the URL the web server serves the derivatives folder at (`/derivatives`). Pages then link images straight there instead of through the app |
 | `hide_categories` | categories never shown, e.g. `["Other", "Class"]` (the public catalogue leaves its excluded categories out altogether, see `publish.py`) |
@@ -101,7 +102,7 @@ or `archive_catalog.sqlite` in `data_dir`), and `volumes_root` is shared with th
 | `page_size` | results per page (60) |
 | `warm_cache` | `true`: work out the category pages' counts in the background at startup |
 | `allow_delete` | Delete buttons. Unset or `true`: shown in local mode; `false`: never. Never in public mode |
-| `serve_originals` | open/download original files. Unset or `true`: yes in local mode; `false`: no. Never in public mode |
+| `serve_originals` | open/download original files from the archive drives. Unset or `true`: yes in local mode; `false`: no. Never in public mode (the copies in `originals/` are offered in both modes) |
 
 Previews need the drive holding the derivatives folder to be plugged in. Without it, files
 show a placeholder icon. Files with no preview of their own (FileMaker databases, archives,
@@ -112,7 +113,9 @@ plugged in.
 ## On the web server
 
 See `deployment.md`: `scripts/publish.py` makes and uploads the public catalogue and the
-images, and `deploy/` has the gunicorn, systemd and Apache files. In public mode the Reveal,
-Delete, Open and Download buttons and the drive status are gone (the PDF/RTF copies of old
-Word files stay), and paths are shown as text. Visitors can only read; nothing on the server
+images, and `deploy/` has the gunicorn, systemd and Apache files. In public mode the Reveal
+and Delete buttons and the drive status are gone, and paths are shown as text. **Open** /
+**Download** are there only for files with a copy in the derivatives folder's `originals/`
+(MS Word, PDF, spreadsheets and databases, made by `copy_originals.py` and uploaded by
+`publish.py`); the PDF/RTF copies of old Word files stay. Visitors can only read; nothing on the server
 can be changed through the app.

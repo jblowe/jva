@@ -29,6 +29,7 @@ In the repository:
 | `scripts/identify_archive.py` | Catalogues, de-duplicates and identifies the formats of everything on the archive drives, one drive at a time, into one shared catalogue (see below) |
 | `scripts/classify_archive.py` + `rules/classify_rules.csv` | Sorts files into TAP / SE Asian Archaeology / Other Archaeology / Class / Museum / Other (see "Classifying by subject") |
 | `scripts/make_derivatives.py` | Makes WebP thumbnails and previews for the search app, recorded in the catalogue (see "Preview images" below) |
+| `scripts/copy_originals.py` | One copy of each distinct document (MS Word, PDF, spreadsheet, database) in the derivatives folder's `originals/`, for downloading from the web server (see "Downloadable originals" below) |
 | `scripts/free_space.py` | Removes extra copies of identical files on an archive drive, with a record of each (see "Freeing space") |
 | `scripts/delete_files.py` | Deletes files you list (or delete in the search app) from the archive drives, and updates the catalogue (see "Deleting files") |
 | `scripts/check_tiffs.py`, `scripts/repair_tiffs.py` | Find TIFFs with a damaged directory (the kind macOS Preview won't open) and repair them (see "Damaged TIFFs") |
@@ -392,6 +393,29 @@ failures again, `--workers N` sets how many files are processed at once (default
 `--limit 200` does a short trial run. For the whole archive, expect roughly 240,000
 images, about 50 GB, and 10–20 hours, mostly spent reading the original images off the
 drive. Don't run it while another script is using the same drive.
+
+### Downloadable originals
+
+    python3 scripts/copy_originals.py                      # into <derivatives folder>/originals
+    python3 scripts/copy_originals.py --dry-run            # only count
+
+The web server has no archive drives, so it can only offer what is in the derivatives folder.
+`copy_originals.py` puts one copy of each distinct MS Word document, PDF, spreadsheet and
+database there (about 34,000 files, 41 GB; clutter is never included), at
+
+    <derivatives folder>/originals/<archive drive>/<its path on that drive>
+
+so the folders are the archive's. It copies the catalogue's own copy of each file
+(`unique_files.archive`/`path`), or another copy of it if that drive isn't plugged in or the
+copy has changed; each copy is checked against the catalogue's SHA-256 as it is written and
+keeps its modification date. Copies are recorded in the catalogue table `originals`.
+`publish.py` sends the ones in public categories with the images (about 22,000 files,
+30 GB), and the search app's **Download** link (and **Open**, for PDFs) then works on the
+public site too; on the Mac it stands in when the archive drive isn't plugged in. Files with
+no extension (old Mac files) download with one added (`.doc`, `.xls`, `.fp3`, ...).
+`--kinds` chooses other kinds (e.g. `--kinds "MS Word,PDF"`). Rerunning only copies what is
+missing; files with no readable copy (drive not plugged in, or offloaded to S3) are counted
+at the end: plug the drive in and run it again.
 
 ## Classifying by subject (TAP vs. the rest)
 

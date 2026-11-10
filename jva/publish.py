@@ -8,6 +8,8 @@ build_public() copies the catalogue and, in the copy only:
   * forgets the drives' volume UUIDs and the Mac paths of the derivatives folder
   * marks a preview as missing if its image file isn't in the derivatives folder, so the
     site shows the placeholder icon instead of a broken image
+  * keeps the downloadable originals (table `originals`, copy_originals.py) of the files
+    published, if their copies are in the derivatives folder
   * rebuilds the full-text index and the search helper tables, and compacts the file
     (rollback journal, not WAL: the server only ever reads it)
 and lists the derivative files the public catalogue uses (derivatives_files.txt), which is
@@ -62,6 +64,8 @@ def build_public(src, out_dir, exclude, derivatives_dir, step=lambda msg: None):
             d.execute(f"DELETE FROM content_class WHERE sha256 NOT IN {keep_sha}")
         if has_table(d, "derivatives"):
             d.execute(f"DELETE FROM derivatives WHERE sha256 NOT IN {keep_sha}")
+        if has_table(d, "originals"):
+            d.execute(f"DELETE FROM originals WHERE sha256 NOT IN {keep_sha}")
         for t in DROP_TABLES:
             d.execute(f"DROP TABLE IF EXISTS {t}")
         if has_table(d, "archives"):
@@ -75,6 +79,11 @@ def build_public(src, out_dir, exclude, derivatives_dir, step=lambda msg: None):
     files = check_derivatives(d, derivatives_dir, counts)
     step(f"checked the derivatives: {len(files):,} files to publish, "
          f"{counts['missing_previews']:,} previews missing")
+    originals = check_originals(d, derivatives_dir, counts)
+    if originals or counts["missing_originals"]:
+        step(f"checked the originals: {len(originals):,} to publish, {counts['missing_originals']:,} "
+             f"not in the derivatives folder (left out)")
+    files |= originals
 
     from jva.catalog import UNIQUE_SEARCH
     try:
@@ -119,4 +128,28 @@ def check_derivatives(d, derivatives_dir, counts):
                 elif rels[k]:
                     d.execute(f"UPDATE derivatives SET {k} = NULL WHERE sha256 = ?", (sha,))
                     counts["missing_docs"] += 1
+    return have
+
+
+def check_originals(d, derivatives_dir, counts):
+    """The downloadable originals (relative paths) the public catalogue offers. Rows whose
+    copy isn't in the derivatives folder (or has another size) are dropped."""
+    counts["missing_originals"] = 0
+    if not has_table(d, "originals"):
+        return set()
+    root = Path(derivatives_dir) if derivatives_dir else None
+    have, gone = set(), []
+    for sha, rel, size in d.execute("SELECT sha256, rel, size FROM originals").fetchall():
+        p = root / rel if root is not None and rel and not set(rel) & {"\n", "\r"} else None   # one per line
+        try:
+            ok = p is not None and p.is_file() and p.stat().st_size == size
+        except OSError:
+            ok = False
+        if ok:
+            have.add(rel)
+        else:
+            gone.append((sha,))
+    with d:
+        d.executemany("DELETE FROM originals WHERE sha256 = ?", gone)
+    counts["missing_originals"] = len(gone)
     return have

@@ -161,6 +161,36 @@ class Public(unittest.TestCase):
         self.assertEqual(self.c.post("/reveal", data={"id": 1}).status_code, 404)
         self.assertEqual(H.connect(self.config).execute("SELECT COUNT(*) FROM files").fetchone()[0], 12)
 
+    def test_download_from_originals(self):
+        from jva.catalog import ORIGINALS
+        u = self.db.execute("SELECT sha256, archive, path, size_bytes FROM unique_files WHERE name='lecture.ppt'").fetchone()
+        rel = f"originals/{u[1]}/{u[2]}"
+        p = self.root / "derivatives" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes((self.root / "Volumes" / u[1] / u[2]).read_bytes())
+        self.db.executescript(ORIGINALS)
+        self.db.execute("INSERT OR REPLACE INTO originals(sha256, rel, size) VALUES (?, ?, ?)", (u[0], rel, u[3]))
+        self.db.commit()
+        t = self.c.get(f"/file/{u[0]}").get_data(as_text=True)
+        self.assertIn("Download</a>", t)
+        r = self.c.get(f"/original/{u[0]}?download=1")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("filename=lecture.ppt", r.headers["Content-Disposition"])
+        self.assertEqual(r.get_data(), p.read_bytes())
+        r.close()
+        p.write_bytes(b"short")                                    # not the catalogued size: not offered
+        self.assertEqual(self.c.get(f"/original/{u[0]}").status_code, 404)
+        self.assertNotIn("Download</a>", self.c.get(f"/file/{u[0]}").get_data(as_text=True))
+
+    def test_download_names(self):
+        dn = self.A.download_name
+        row = {"name": "x", "mime": "", "mac_type": "", "mac_creator": "", "ext": "", "format": ""}
+        self.assertEqual(dn(dict(row, name="report.doc")), "report.doc")
+        self.assertEqual(dn(dict(row, name="Bags 94", mac_type="FMP3")), "Bags 94.fp3")
+        self.assertEqual(dn(dict(row, name="Bags 94", mac_type="FMPR")), "Bags 94.fp3")
+        self.assertEqual(dn(dict(row, name="Letter", mac_type="WDBN", mac_creator="MSWD")), "Letter.doc")
+        self.assertEqual(dn(dict(row, name="Costs", mime="application/vnd.ms-excel")), "Costs.xls")
+
 
 if __name__ == "__main__":
     unittest.main()
