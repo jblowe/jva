@@ -59,6 +59,30 @@ class Local(unittest.TestCase):
         self.assertIn(b"field notes", r.data)
 
 
+class MatchingMember(unittest.TestCase):
+    """A group found by one of its members is shown by that member (its own app and archive)."""
+
+    def test_group_shown_by_a_matching_member(self):
+        root, config = H.make_archive()
+        d = root / "Volumes" / "ARCH1" / "CumulativeArchive" / "THAI 2008" / "objects"
+        d.mkdir(parents=True)
+        (d / "1002.JPG").write_bytes(b"\xff\xd8 picture of 1002" * 30)
+        (d / "1002.doc").write_bytes(b"\xd0\xcf\x11\xe0 record of 1002" * 30)
+        r = H.run_script("identify_archive", "-a", "ARCH1", "--skip-identify", config=config)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        db = H.connect(config)
+        main = db.execute("SELECT u.name FROM file_groups g JOIN unique_files u ON u.id = g.group_id "
+                          "WHERE g.label = '1002'").fetchone()[0]
+        self.assertEqual(main, "1002.JPG")                  # the group's main file is the picture
+        c = load_app(config).app.test_client()
+        t = c.get("/search?q=1002").get_data(as_text=True)
+        self.assertIn(">1002.JPG<", t)                      # no filter: shown by its main file
+        t = c.get("/search?q=1002&kind=MS+Word").get_data(as_text=True)
+        self.assertIn(">1002.doc<", t)                      # asking for Word: shown by the Word file
+        self.assertNotIn(">1002.JPG<", t)
+        self.assertIn("2 versions", t)
+
+
 class Versions(unittest.TestCase):
     """Similar files (jva/similar.py) shown together, and on a file's page."""
 

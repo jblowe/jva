@@ -50,7 +50,9 @@ python3 scripts/time_queries.py --cat TAP --q anvil
   five drives appears once, marked "5 copies". Versions of the same thing -- files with the
   same name, or the same object number (see "Similar files" in `archive-workflow.md`) -- are
   shown together as one entry, marked "12 versions", by the group's main file (a picture,
-  preferably one named just `10091.JPG`). **Versions together / One by one** above the results
+  preferably one named just `10091.JPG`) if it matches the search and filters, otherwise by a
+  member that does: choosing Kind "MS Word" shows the group by one of its Word documents, not
+  by its picture. **Versions together / One by one** above the results
   switches between that and every distinct file on its own. The filter counts on the left
   always count distinct files. Search matches words in names and folder paths.
   Words are matched as prefixes (`anvil` finds "Anvils"), and `"quoted phrases"` must appear

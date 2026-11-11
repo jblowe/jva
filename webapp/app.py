@@ -346,7 +346,9 @@ def search():
     view = request.args.get("view", "grid")
     page = max(1, request.args.get("page", 1, type=int))
     size = CFG["page_size"]
-    # similar files together (one entry per group, shown by its main file), or one by one
+    # similar files together (one entry per group), or one by one. A group is shown by its main
+    # file if that matches the search and filters, else by a member that does: someone asking
+    # for MS Word should see a Word document, not the group's picture
     together = grouped() and request.args.get("similar") != "apart"
 
     frm, where, params = build(q, filters)
@@ -360,10 +362,12 @@ def search():
             rank = "MIN(s.rank)" if "unique_search" in frm else "0"
             rows = db().execute(
                 f"""SELECT {cols}, g.members versions, g.label group_label, m.n matched
-                    FROM (SELECT COALESCE(u.group_id, u.id) gid, {rank} r, COUNT(*) n
+                    FROM (SELECT COALESCE(u.group_id, u.id) gid, {rank} r, COUNT(*) n,
+                                 CASE WHEN MAX(u.id = COALESCE(u.group_id, u.id))
+                                      THEN COALESCE(u.group_id, u.id) ELSE MIN(u.id) END shown
                           FROM {frm}{where} GROUP BY 1) m
-                    JOIN unique_files u ON u.id = m.gid
-                    LEFT JOIN file_groups g ON g.group_id = u.id
+                    JOIN unique_files u ON u.id = m.shown
+                    LEFT JOIN file_groups g ON g.group_id = m.gid
                     ORDER BY {order_by(sort, direction).replace("s.rank", "m.r")} LIMIT ? OFFSET ?""",
                 params + [size, (page - 1) * size]).fetchall()
         else:
