@@ -53,6 +53,20 @@ class CopyOriginals(unittest.TestCase):
         self.assertFalse(notes.exists())
         self.assertEqual(list(self.deriv.rglob("*.copying")), [])
 
+    def test_read_only_and_leftovers(self):
+        vols = self.root / "Volumes"
+        src = vols / "ARCH1" / "CumulativeArchive/THAI 2008/misc/notes.txt"
+        src.chmod(0o444)                                     # copies don't take the source's permissions
+        left = self.deriv / "originals/ARCH1/CumulativeArchive/THAI 2008/misc/notes.txt.copying"
+        left.parent.mkdir(parents=True)
+        left.write_text("half a file")
+        left.chmod(0o444)                                    # a stopped run's leftover, read-only
+        self.run_copy()
+        copy = left.with_name("notes.txt")
+        self.assertEqual(copy.read_bytes(), src.read_bytes())
+        self.assertTrue(copy.stat().st_mode & 0o200)
+        self.assertFalse(left.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

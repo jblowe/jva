@@ -26,7 +26,6 @@ offloaded to S3 (stubs on the drives) can't be copied and are listed at the end.
 import argparse
 import hashlib
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -68,8 +67,21 @@ def sources(db, uid, archive, path, size, volumes_root):
             continue
 
 
+def unlock(path):
+    """Clear a Mac file's flags (Finder's "Locked" is the uchg flag), so it can be replaced or
+    renamed; and make it writable. Nothing if it isn't there."""
+    try:
+        if hasattr(os, "chflags"):
+            os.chflags(path, 0)
+        os.chmod(path, 0o644)
+    except OSError:
+        pass
+
+
 def copy_checked(src, dest, sha256, root):
-    """Copy src to dest, checking the SHA-256 as it goes. -> None, or why it failed."""
+    """Copy src to dest, checking the SHA-256 as it goes. -> None, or why it failed.
+    Only the contents and the dates are copied: not the source's permissions or flags (a
+    file locked in the Finder would give a locked copy, which can't be renamed into place)."""
     tmp = dest.with_name(dest.name + ".copying")
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +89,12 @@ def copy_checked(src, dest, sha256, root):
         if not root.is_dir():
             raise DestGone(str(e))
         return f"can't make the folder: {e}"
+    if os.path.lexists(tmp):             # left by a run that stopped
+        unlock(tmp)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
     h = hashlib.sha256()
     try:
         with open(src, "rb") as fi, open(tmp, "wb") as fo:
@@ -98,10 +116,18 @@ def copy_checked(src, dest, sha256, root):
         tmp.unlink()
         return "the copy read doesn't match the catalogue's checksum"
     try:
-        shutil.copystat(src, tmp)        # keep the modification date
+        st = os.stat(src)
+        os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))          # keep the dates
     except OSError:
         pass
-    os.replace(tmp, dest)
+    if os.path.lexists(dest):
+        unlock(dest)
+    try:
+        os.replace(tmp, dest)
+    except OSError as e:
+        if not root.is_dir():
+            raise DestGone(str(e))
+        return f"can't put the copy in place: {e}"
     return None
 
 
